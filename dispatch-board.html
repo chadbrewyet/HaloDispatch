@@ -6,6 +6,7 @@
   <title>Digital Dispatch Board</title>
   <style>
     :root {
+      --bottom-height: 172px;
       --bg: #f3f6f8;
       --panel: #ffffff;
       --panel-2: #f8fafb;
@@ -29,6 +30,26 @@
       --slot-width: 122px;
       --radius: 8px;
       font-family: Inter, "Segoe UI", Arial, sans-serif;
+    }
+
+    body[data-theme="dark"] {
+      --bg: #101820;
+      --panel: #17222b;
+      --panel-2: #121c24;
+      --line: #2a3a45;
+      --line-strong: #3f5360;
+      --ink: #e6eef2;
+      --muted: #a8b6bf;
+      --soft: #1f2c35;
+      --accent: #4fb3d8;
+      --accent-2: #4cc0a0;
+      --shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+      --ticket: #2a2518;
+      --ticket-border: #9f8030;
+      --appt: #162f3f;
+      --appt-border: #4d8eaa;
+      --task: #1d3327;
+      --task-border: #5b946f;
     }
 
     * { box-sizing: border-box; }
@@ -73,7 +94,7 @@
 
     input, select, textarea {
       border: 1px solid var(--line-strong);
-      background: #fff;
+      background: var(--panel);
       border-radius: 6px;
       min-height: 34px;
       padding: 6px 9px;
@@ -91,7 +112,7 @@
     .app {
       height: 100vh;
       display: grid;
-      grid-template-rows: 58px minmax(0, 1fr) 172px;
+      grid-template-rows: 58px minmax(0, 1fr) var(--bottom-height);
     }
 
     .topbar {
@@ -100,7 +121,7 @@
       gap: 12px;
       padding: 10px 16px;
       border-bottom: 1px solid var(--line);
-      background: #fff;
+      background: var(--panel);
     }
 
     .brand {
@@ -137,7 +158,7 @@
       border: 1px solid var(--line-strong);
       border-radius: 6px;
       overflow: hidden;
-      background: #fff;
+      background: var(--panel);
     }
 
     .segmented button {
@@ -185,7 +206,7 @@
       gap: 10px;
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
-      background: #fff;
+      background: var(--panel);
     }
 
     .panel-head h2, .section-title h3 {
@@ -207,7 +228,12 @@
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      overflow: hidden;
+      overflow: auto;
+      resize: vertical;
+      min-height: 172px;
+      max-height: 70vh;
+      display: grid;
+      grid-template-rows: auto minmax(0, 1fr);
     }
 
     .report-list header {
@@ -216,7 +242,7 @@
       gap: 8px;
       padding: 10px;
       border-bottom: 1px solid var(--line);
-      background: #fdfefe;
+      background: var(--panel);
     }
 
     .report-name {
@@ -230,7 +256,7 @@
     .report-meta {
       grid-column: 1 / -1;
       display: grid;
-      grid-template-columns: minmax(0, 1fr) 82px;
+      grid-template-columns: minmax(0, 1fr) 96px 82px;
       gap: 8px;
     }
 
@@ -238,7 +264,16 @@
       padding: 8px;
       min-height: 116px;
       display: grid;
+      align-content: start;
       gap: 8px;
+      overflow: auto;
+    }
+
+    .ticket-stack.list-view, .pool-list.list-view {
+      display: grid;
+      grid-auto-flow: row;
+      grid-template-columns: 1fr;
+      grid-auto-columns: unset;
     }
 
     .ticket-card {
@@ -256,6 +291,34 @@
     .ticket-card:active { cursor: grabbing; }
     .ticket-card.dragging { opacity: 0.45; }
     .ticket-card[class*="color-"] { border-left-width: 5px; }
+
+    .ticket-card.list-mode {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 8px 10px;
+      padding: 7px 9px;
+    }
+
+    .ticket-card.list-mode .ticket-top { display: contents; }
+
+    .ticket-card.list-mode .ticket-id {
+      grid-column: 1;
+      white-space: nowrap;
+    }
+
+    .ticket-card.list-mode .priority {
+      grid-column: 3;
+      justify-self: end;
+    }
+
+    .ticket-card.list-mode .ticket-title {
+      grid-column: 2;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .ticket-card.list-mode .ticket-line { display: none; }
 
     .ticket-top {
       display: flex;
@@ -308,7 +371,7 @@
       align-items: end;
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
-      background: #fff;
+      background: var(--panel);
     }
 
     .field { display: grid; gap: 4px; }
@@ -322,7 +385,7 @@
 
     .chip {
       border: 1px solid var(--line-strong);
-      background: #fff;
+      background: var(--panel);
       border-radius: 999px;
       min-height: 30px;
       padding: 5px 9px;
@@ -429,7 +492,7 @@
 
     .drop-zone {
       border-bottom: 1px solid var(--line);
-      background: #fdfefe;
+      background: var(--panel);
       padding: 7px;
       transition: outline-color 0.15s ease, background 0.15s ease;
       min-height: 52px;
@@ -447,7 +510,7 @@
       display: grid;
       grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
       border-right: 1px solid var(--line);
-      background: #fff;
+      background: var(--panel);
     }
 
     .vertical-task-stack .drop-zone {
@@ -467,7 +530,7 @@
       box-shadow: var(--shadow);
       border: 1px solid var(--line-strong);
       border-radius: var(--radius);
-      background: #fff;
+      background: var(--panel);
       overflow: auto;
       padding: 10px;
     }
@@ -501,7 +564,7 @@
       max-width: calc(100vw - 32px);
       border: 1px solid var(--line-strong);
       border-radius: var(--radius);
-      background: #fff;
+      background: var(--panel);
       box-shadow: var(--shadow);
       padding: 10px;
       font-size: 12px;
@@ -578,7 +641,7 @@
       min-height: 0;
       overflow-x: hidden;
       overflow-y: auto;
-      background: #fff;
+      background: var(--panel);
     }
 
     .board.vertical .calendar {
@@ -589,7 +652,7 @@
     }
 
     .time-axis {
-      background: #f6f9fa;
+      background: var(--panel-2);
       border-right: 1px solid var(--line);
     }
 
@@ -728,15 +791,17 @@
 
     .bottom-pool {
       border-top: 1px solid var(--line);
-      background: #fff;
+      background: var(--panel);
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
+      resize: vertical;
+      overflow: hidden;
     }
 
     .bottom-head {
       display: grid;
-      grid-template-columns: auto minmax(180px, 320px) 150px 150px auto;
+      grid-template-columns: auto minmax(180px, 320px) 150px 150px 118px auto;
       align-items: center;
       gap: 10px;
       padding: 9px 14px;
@@ -753,7 +818,7 @@
       overflow: auto;
       display: grid;
       grid-auto-flow: column;
-      grid-auto-columns: 270px;
+      grid-auto-columns: minmax(220px, min(270px, 24vw));
       gap: 8px;
       padding: 10px 14px;
       background: var(--panel-2);
@@ -764,7 +829,7 @@
       inset: 0 0 0 auto;
       width: 420px;
       max-width: calc(100vw - 40px);
-      background: #fff;
+      background: var(--panel);
       border-left: 1px solid var(--line);
       box-shadow: var(--shadow);
       z-index: 100;
@@ -823,7 +888,7 @@
     .modal {
       width: 560px;
       max-width: 100%;
-      background: #fff;
+      background: var(--panel);
       border-radius: var(--radius);
       box-shadow: var(--shadow);
       border: 1px solid var(--line);
@@ -909,7 +974,7 @@
 
     .toast {
       border: 1px solid var(--line-strong);
-      background: #fff;
+      background: var(--panel);
       box-shadow: var(--shadow);
       border-radius: var(--radius);
       padding: 9px 10px;
@@ -1004,7 +1069,7 @@
       </section>
     </main>
 
-    <section class="bottom-pool">
+    <section class="bottom-pool" data-resize-key="pool">
       <div class="bottom-head">
         <h2>Filtered Ticket Pool</h2>
         <input id="poolSearch" type="search" placeholder="Search tickets, clients, summaries">
@@ -1020,6 +1085,10 @@
           <option value="Project">Project</option>
           <option value="Maintenance">Maintenance</option>
         </select>
+        <select id="poolViewSelect" title="Ticket pool view">
+          <option value="card">Cards</option>
+          <option value="list">List</option>
+        </select>
         <button id="clearFiltersBtn">Clear</button>
       </div>
       <div class="pool-list" id="poolList"></div>
@@ -1032,6 +1101,16 @@
       <button class="icon" id="closeSettingsBtn" title="Close settings">x</button>
     </div>
     <div class="drawer-body">
+      <section class="settings-card">
+        <h3>Appearance</h3>
+        <div class="field">
+          <label>Theme</label>
+          <select id="themeSelect">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </section>
       <section class="settings-card">
         <h3>Ticket Card Fields</h3>
         <p style="margin:0;color:var(--muted);font-size:13px;">Choose what appears directly on cards. Right-click a ticket for quick details, or double-click to open the larger ticket view.</p>
@@ -1175,6 +1254,9 @@
       visibleFields: ["client", "sla", "estimate"],
       workingHours: [8, 17],
       colorBy: "priority",
+      theme: "light",
+      listViews: { pool: "card" },
+      sectionSizes: {},
       apiBaseUrl: "",
       pendingAppointment: null,
       activeTicketId: null,
@@ -1206,12 +1288,15 @@
         if (ticket && !ticket.dateField) ticket.dateField = item.date;
       });
       loadLocalSettings();
+      applyTheme();
       renderTeamSelect();
       renderTechPicker();
       renderFieldChecks();
       renderReportLists();
       renderBoard();
       renderPool();
+      applySavedSectionSizes();
+      observeResizableSections();
       bindEvents();
       toast("Ready", "Single-file dispatch board loaded with mock HaloPSA actions.");
     }
@@ -1234,6 +1319,16 @@
         state.colorBy = $("colorBySelect").value;
         saveLocalSettings();
         renderAll();
+      });
+      $("themeSelect").addEventListener("change", () => {
+        state.theme = $("themeSelect").value;
+        applyTheme();
+        saveLocalSettings();
+      });
+      $("poolViewSelect").addEventListener("change", () => {
+        state.listViews.pool = $("poolViewSelect").value;
+        saveLocalSettings();
+        renderPool();
       });
       $("horizontalBtn").addEventListener("click", () => setOrientation("horizontal"));
       $("verticalBtn").addEventListener("click", () => setOrientation("vertical"));
@@ -1270,6 +1365,12 @@
           state.colorBy = saved.colorBy;
           $("colorBySelect").value = saved.colorBy;
         }
+        if (saved.theme) {
+          state.theme = saved.theme;
+          $("themeSelect").value = saved.theme;
+        }
+        if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
+        if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
         if (saved.apiBaseUrl) {
           state.apiBaseUrl = saved.apiBaseUrl;
           $("apiBaseUrl").value = saved.apiBaseUrl;
@@ -1284,8 +1385,15 @@
       localStorage.setItem("dispatchBoardSettings", JSON.stringify({
         visibleFields: state.visibleFields,
         colorBy: state.colorBy,
+        theme: state.theme,
+        listViews: state.listViews,
+        sectionSizes: state.sectionSizes,
         apiBaseUrl: state.apiBaseUrl
       }));
+    }
+
+    function applyTheme() {
+      document.body.dataset.theme = state.theme;
     }
 
     function renderTeamSelect() {
@@ -1342,6 +1450,14 @@
           renderReportLists();
         });
       });
+      $("reportLists").querySelectorAll("[data-list-view]").forEach(select => {
+        select.addEventListener("change", () => {
+          state.listViews[sectionKey(Number(select.dataset.index))] = select.value;
+          saveLocalSettings();
+          renderReportLists();
+        });
+      });
+      observeResizableSections();
       makeTicketsDraggable();
     }
 
@@ -1349,30 +1465,37 @@
       const report = reports.find(item => item.id === reportId) || reports[0];
       const listTickets = tickets.filter(ticket => ticket.report === report.id && shouldShowTicketCard(ticket));
       const options = reports.map(item => `<option value="${item.id}" ${item.id === report.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("");
+      const key = sectionKey(index);
+      const view = state.listViews[key] || "card";
+      const sizeStyle = state.sectionSizes[key] ? `style="height:${state.sectionSizes[key]}px"` : "";
       return `
-        <section class="report-list">
+        <section class="report-list" data-resize-key="${key}" ${sizeStyle}>
           <header>
             <div class="report-name">${escapeHtml(report.name)}</div>
             <button class="icon" data-remove-list data-index="${index}" title="Remove list">-</button>
             <div class="report-meta">
               <select data-report-select data-index="${index}">${options}</select>
+              <select data-list-view data-index="${index}" title="List display">
+                <option value="card" ${view === "card" ? "selected" : ""}>Cards</option>
+                <option value="list" ${view === "list" ? "selected" : ""}>List</option>
+              </select>
               <span class="api-pill" title="${escapeHtml(report.reportId)}">${listTickets.length} open</span>
             </div>
           </header>
-          <div class="ticket-stack">
-            ${listTickets.length ? listTickets.map(renderTicketCard).join("") : `<div class="empty">No tickets in this report.</div>`}
+          <div class="ticket-stack ${view === "list" ? "list-view" : "card-view"}">
+            ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets in this report.</div>`}
           </div>
         </section>
       `;
     }
 
-    function renderTicketCard(ticket) {
+    function renderTicketCard(ticket, view = "card") {
       const visible = state.visibleFields.map(field => {
         if (!ticket[field]) return "";
         return `<div class="ticket-line"><span>${labelFor(field)}</span><strong>${escapeHtml(ticket[field])}</strong></div>`;
       }).join("");
       return `
-        <article class="ticket-card ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${ticket.id}" data-drag-source="ticket">
+        <article class="ticket-card ${ticketColorClass(ticket)} ${view === "list" ? "list-mode" : ""}" draggable="true" data-ticket-id="${ticket.id}" data-drag-source="ticket">
           <div class="ticket-top">
             <span class="ticket-id">#${ticket.id}</span>
             <span class="priority ${ticket.priority.toLowerCase()}">${ticket.priority}</span>
@@ -1496,12 +1619,52 @@
       const search = $("poolSearch").value.trim().toLowerCase();
       const priority = $("poolPriority").value;
       const type = $("poolType").value;
+      const view = state.listViews.pool || "card";
+      $("poolViewSelect").value = view;
       const filtered = tickets.filter(ticket => {
         const text = `${ticket.id} ${ticket.client} ${ticket.title} ${ticket.site} ${ticket.contact}`.toLowerCase();
         return (!search || text.includes(search)) && (!priority || ticket.priority === priority) && (!type || ticket.type === type) && shouldShowTicketCard(ticket);
       });
-      $("poolList").innerHTML = filtered.length ? filtered.map(renderTicketCard).join("") : `<div class="empty">No tickets match the current filters.</div>`;
+      $("poolList").className = `pool-list ${view === "list" ? "list-view" : "card-view"}`;
+      $("poolList").innerHTML = filtered.length ? filtered.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets match the current filters.</div>`;
+      applySavedSectionSizes();
+      observeResizableSections();
       makeTicketsDraggable();
+    }
+
+    function sectionKey(index) {
+      return `report-${index}`;
+    }
+
+    function applySavedSectionSizes() {
+      Object.entries(state.sectionSizes).forEach(([key, height]) => {
+        if (key === "pool") {
+          document.documentElement.style.setProperty("--bottom-height", `${height}px`);
+        }
+        document.querySelectorAll(`[data-resize-key="${key}"]`).forEach(section => {
+          section.style.height = `${height}px`;
+        });
+      });
+    }
+
+    function observeResizableSections() {
+      if (!window.ResizeObserver) return;
+      if (state.resizeObserver) state.resizeObserver.disconnect();
+      state.resizeObserver = new ResizeObserver(entries => {
+        for (const entry of entries) {
+          const key = entry.target.dataset.resizeKey;
+          if (!key) continue;
+          const height = Math.round(entry.contentRect.height);
+          if (height < 80) continue;
+          state.sectionSizes[key] = height;
+          if (key === "pool") {
+            document.documentElement.style.setProperty("--bottom-height", `${height}px`);
+          }
+        }
+        clearTimeout(state.resizeSaveTimer);
+        state.resizeSaveTimer = setTimeout(saveLocalSettings, 250);
+      });
+      document.querySelectorAll("[data-resize-key]").forEach(section => state.resizeObserver.observe(section));
     }
 
     function wireDropZones() {
