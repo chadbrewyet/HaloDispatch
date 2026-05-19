@@ -109,6 +109,7 @@ const technicians = [
       $("settingsBtn").addEventListener("click", () => $("configDrawer").classList.add("open"));
       $("closeSettingsBtn").addEventListener("click", () => $("configDrawer").classList.remove("open"));
       $("saveApiBtn").addEventListener("click", saveApiSettings);
+      $("testWorkerBtn").addEventListener("click", testWorkerConnection);
       $("refreshBtn").addEventListener("click", refreshReports);
       $("poolSearch").addEventListener("input", renderPool);
       $("poolPriority").addEventListener("change", renderPool);
@@ -853,10 +854,12 @@ const technicians = [
 
     async function loadHaloTechnicians() {
       if (!state.apiProxyUrl) return;
+      const workerReady = await testWorkerConnection({ quiet: true });
+      if (!workerReady) return;
       const result = await callHalo("loadTechnicians", {
         technicianIds: haloTechnicianIds,
         teamIds: haloTeamIds
-      });
+      }, { quiet: true });
       let data = result?.data;
       if (!data?.technicians?.length) {
         data = await loadHaloTechniciansFromAgentEndpoint();
@@ -874,15 +877,11 @@ const technicians = [
 
     async function loadHaloTechniciansFromAgentEndpoint() {
       try {
-        const response = await fetch(`${state.apiProxyUrl.replace(/\/$/, "")}/api/halo/Agent`);
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(result.error || `HaloPSA proxy returned ${response.status}`);
-        }
+        const result = await fetchWorkerJson("/api/halo/Agent");
         return normalizeHaloAgents(result.data || result);
       } catch (error) {
         console.error(error);
-        toast("Halo technician load failed", error.message);
+        toast("Halo technician load failed", friendlyFetchError(error));
         return null;
       }
     }
@@ -973,7 +972,29 @@ const technicians = [
       toast("Report refresh requested", "This is where HaloPSA report results will repopulate the ticket lists.");
     }
 
-    async function callHalo(action, payload) {
+    async function testWorkerConnection(options = {}) {
+      if (!state.apiProxyUrl) {
+        if (!options.quiet) toast("Worker URL missing", "Add the Cloudflare Worker URL in Settings first.");
+        return false;
+      }
+
+      try {
+        const result = await fetchWorkerJson("/api/health");
+        const ok = result?.ok === true && result?.service === "halo-dispatch-api";
+        if (!ok) {
+          throw new Error("The URL responded, but it does not look like the Halo Dispatch Worker.");
+        }
+        $("apiState").textContent = "HaloPSA Worker connected";
+        if (!options.quiet) toast("Worker connected", "Cloudflare Worker health check passed.");
+        return true;
+      } catch (error) {
+        $("apiState").textContent = "Worker connection failed";
+        if (!options.quiet) toast("Worker connection failed", friendlyFetchError(error));
+        return false;
+      }
+    }
+
+    async function callHalo(action, payload, options = {}) {
       const request = {
         action,
         proxyUrl: state.apiProxyUrl || "(mock)",
@@ -984,21 +1005,40 @@ const technicians = [
       if (!state.apiProxyUrl) return request;
 
       try {
-        const response = await fetch(`${state.apiProxyUrl.replace(/\/$/, "")}/api/halo/action`, {
+        return await fetchWorkerJson("/api/halo/action", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(request)
         });
-        const result = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(result.error || `HaloPSA proxy returned ${response.status}`);
-        }
-        return result;
       } catch (error) {
         console.error(error);
-        toast("HaloPSA API error", error.message);
+        if (!options.quiet) toast("HaloPSA API error", friendlyFetchError(error));
         return { ok: false, error: error.message, request };
       }
+    }
+
+    async function fetchWorkerJson(path, options = {}) {
+      const response = await fetch(`${workerBaseUrl()}${path}`, options);
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(result.error || result.message || `HaloPSA proxy returned ${response.status}`);
+      }
+      return result;
+    }
+
+    function workerBaseUrl() {
+      const url = state.apiProxyUrl.trim().replace(/\/$/, "");
+      if (!/^https?:\/\//i.test(url)) {
+        throw new Error("Worker URL must start with https://");
+      }
+      return url;
+    }
+
+    function friendlyFetchError(error) {
+      if (error.message === "Failed to fetch") {
+        return "Unable to reach the Worker URL. Confirm the saved Worker API URL is the workers.dev URL, not the GitHub Pages URL, and that the Worker is deployed.";
+      }
+      return error.message;
     }
 
     function renderAll() {
