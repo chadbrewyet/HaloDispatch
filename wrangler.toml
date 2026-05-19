@@ -8,6 +8,19 @@ compatibility_date = "2026-05-18"
 
 [vars]
 # Copy these values from HaloPSA > Configuration > Integrations > HaloPSA API > API Details.
-HALO_AUTH_URL = "https://YOUR_TENANT.halopsa.com/auth/token"
-HALO_RESOURCE_SERVER = "https://YOUR_TENANT.halopsa.com"
+HALO_AUTH_URL = "https://gagepsa.halopsa.com/auth/token"
+HALO_RESOURCE_SERVER = "https://gagepsa.halopsa.com"
 HALO_SCOPE = "all"
+
+# Dashboard technician IDs already match these Halo agent IDs.
+TECHNICIAN_MAP_JSON = "{\"3\":3,\"14\":14,\"17\":17,\"23\":23,\"25\":25,\"31\":31,\"39\":39}"
+
+# Halo team IDs available for dashboard team selection.
+HALO_TEAM_IDS = "1,3,11"
+
+# Required for dragging to the date-only / without-time section.
+HALO_DISPATCH_DATE_FIELD_ID = "486"
+HALO_DISPATCH_DATE_FIELD_NAME = "CFTaskWithoutTimeDate"
+
+# Optional. Leave blank or remove if Halo should use its default appointment type.
+HALO_APPOINTMENT_TYPE_ID = ""

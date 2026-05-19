@@ -31,6 +31,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
 4. Update the Worker variables in `wrangler.toml`:
 
    - `TECHNICIAN_MAP_JSON` maps dashboard technician IDs to Halo agent IDs.
+   - `HALO_TEAM_IDS` lists the Halo teams available for team selection.
    - `HALO_DISPATCH_DATE_FIELD_ID` is the custom ticket date field used by the without-time section.
    - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
 
@@ -60,12 +61,16 @@ The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
 
 Moving an already scheduled appointment to a new time or technician is ready in the UI, but the Worker intentionally returns `local-only` until the dashboard is loading and storing real Halo `appointment_id` values. That avoids creating duplicate appointments while testing.
 
+Current Halo configuration:
+
+- technician IDs: `3`, `14`, `17`, `23`, `25`, `31`, `39`
+- team IDs: `1`, `3`, `11`
+- without-time task date field: `CFTaskWithoutTimeDate` / `486`
+- ticket URL prefix: `https://gagepsa.halopsa.com/ticket?id=`
+
 ## Still Needed From HaloPSA
 
 To finish the live integration, we still need:
 
-- real Halo agent IDs for each visible technician
 - published report IDs for the ticket lists
-- the custom ticket date field ID for without-time tasks
-- the ticket deep-link URL format
 - live appointment loading so scheduled cards include `appointment_id` for persisted rescheduling

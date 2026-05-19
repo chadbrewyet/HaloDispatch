@@ -168,6 +168,7 @@ function ticketAssignmentPayload(payload, env) {
     customfields: [
       {
         id: Number(dateFieldId),
+        name: env.HALO_DISPATCH_DATE_FIELD_NAME || "CFTaskWithoutTimeDate",
         value: payload.dateFieldValue || payload.date
       }
     ]

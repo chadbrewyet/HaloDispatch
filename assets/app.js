@@ -1,11 +1,19 @@
 const technicians = [
-      { id: "davis", name: "2 Davis", team: "Field Service" },
-      { id: "mlee", name: "M. Lee", team: "Field Service" },
-      { id: "aperez", name: "A. Perez", team: "Projects" },
-      { id: "jkim", name: "J. Kim", team: "Remote Support" }
+      { id: "3", name: "Technician 3", teamId: "1", team: "Team 1" },
+      { id: "14", name: "Technician 14", teamId: "1", team: "Team 1" },
+      { id: "17", name: "Technician 17", teamId: "1", team: "Team 1" },
+      { id: "23", name: "Technician 23", teamId: "3", team: "Team 3" },
+      { id: "25", name: "Technician 25", teamId: "3", team: "Team 3" },
+      { id: "31", name: "Technician 31", teamId: "11", team: "Team 11" },
+      { id: "39", name: "Technician 39", teamId: "11", team: "Team 11" }
     ];
 
-    const teams = ["All Teams", "Field Service", "Projects", "Remote Support"];
+    const teams = [
+      { id: "all", name: "All Teams" },
+      { id: "1", name: "Team 1" },
+      { id: "3", name: "Team 3" },
+      { id: "11", name: "Team 11" }
+    ];
 
     const reports = [
       { id: "r-dispatch", name: "Dispatch Queue", reportId: "Halo Report 1042" },
@@ -25,8 +33,8 @@ const technicians = [
     ];
 
     const state = {
-      selectedTechs: ["davis", "mlee"],
-      team: "Field Service",
+      selectedTechs: ["3", "14", "17"],
+      team: "1",
       orientation: "horizontal",
       reportLists: ["r-dispatch", "r-emergency"],
       visibleFields: ["client", "sla", "estimate"],
@@ -35,15 +43,15 @@ const technicians = [
       theme: "light",
       listViews: { pool: "card" },
       sectionSizes: {},
-      apiBaseUrl: "",
+      apiBaseUrl: "https://gagepsa.halopsa.com/ticket?id=",
       apiProxyUrl: "",
       pendingAppointment: null,
       activeTicketId: null,
       boardItems: [
-        { ticketId: 23912, techId: "mlee", kind: "allDay", label: "Firmware maintenance", date: "" },
-        { ticketId: 23907, techId: "davis", kind: "timed", time: "09:00", duration: 60, date: "" },
-        { ticketId: 23919, techId: "mlee", kind: "timed", time: "15:00", duration: 60, date: "" },
-        { ticketId: 23901, techId: "davis", kind: "noTime", label: "Scanner replacement", date: "" }
+        { ticketId: 23912, techId: "14", kind: "allDay", label: "Firmware maintenance", date: "" },
+        { ticketId: 23907, techId: "3", kind: "timed", time: "09:00", duration: 60, date: "" },
+        { ticketId: 23919, techId: "14", kind: "timed", time: "15:00", duration: 60, date: "" },
+        { ticketId: 23901, techId: "3", kind: "noTime", label: "Scanner replacement", date: "" }
       ]
     };
 
@@ -151,10 +159,8 @@ const technicians = [
         }
         if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
-        if (saved.apiBaseUrl) {
-          state.apiBaseUrl = saved.apiBaseUrl;
-          $("apiBaseUrl").value = saved.apiBaseUrl;
-        }
+        if (saved.apiBaseUrl) state.apiBaseUrl = saved.apiBaseUrl;
+        $("apiBaseUrl").value = state.apiBaseUrl;
         if (saved.apiProxyUrl) {
           state.apiProxyUrl = saved.apiProxyUrl;
           $("apiProxyUrl").value = saved.apiProxyUrl;
@@ -182,7 +188,7 @@ const technicians = [
     }
 
     function renderTeamSelect() {
-      $("teamSelect").innerHTML = teams.map(team => `<option>${team}</option>`).join("");
+      $("teamSelect").innerHTML = teams.map(team => `<option value="${team.id}">${team.name}</option>`).join("");
       $("teamSelect").value = state.team;
     }
 
@@ -768,7 +774,11 @@ const technicians = [
     }
 
     function ticketUrl(ticket) {
-      return state.apiBaseUrl ? `${state.apiBaseUrl.replace(/\/$/, "")}/tickets?id=${ticket.id}` : `HaloPSA ticket URL pending for #${ticket.id}`;
+      if (!state.apiBaseUrl) return `HaloPSA ticket URL pending for #${ticket.id}`;
+      if (state.apiBaseUrl.includes("?id=") || state.apiBaseUrl.endsWith("=")) {
+        return `${state.apiBaseUrl}${ticket.id}`;
+      }
+      return `${state.apiBaseUrl.replace(/\/$/, "")}/ticket?id=${ticket.id}`;
     }
 
     function detailBox(label, value) {
@@ -814,10 +824,10 @@ const technicians = [
 
     function selectTeam() {
       state.team = $("teamSelect").value;
-      if (state.team === "All Teams") {
+      if (state.team === "all") {
         state.selectedTechs = technicians.map(tech => tech.id);
       } else {
-        state.selectedTechs = technicians.filter(tech => tech.team === state.team).map(tech => tech.id);
+        state.selectedTechs = technicians.filter(tech => tech.teamId === state.team).map(tech => tech.id);
       }
       renderTechPicker();
       renderBoard();
