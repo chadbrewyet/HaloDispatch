@@ -132,7 +132,7 @@ async function handleTechnicianLoad(payload, env) {
       const memberships = Array.isArray(agent.teams) ? agent.teams : [];
       const matchingTeams = memberships.filter(team => {
         const teamId = String(team.team_id ?? team.id ?? "");
-        return teamIds.has(teamId) && team.in_section === true;
+        return teamIds.has(teamId) && isTrue(team.in_section);
       });
       if (!matchingTeams.length) return null;
 
@@ -272,6 +272,10 @@ function parseListEnv(value) {
     .split(",")
     .map(item => item.trim())
     .filter(Boolean);
+}
+
+function isTrue(value) {
+  return value === true || String(value).toLowerCase() === "true";
 }
 
 function unwrapList(data) {

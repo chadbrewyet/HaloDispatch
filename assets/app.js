@@ -15,6 +15,9 @@ const technicians = [
       { id: "11", name: "Team 11" }
     ];
 
+    const haloTechnicianIds = ["4", "14", "17", "23", "25", "31", "39"];
+    const haloTeamIds = ["1", "3", "11"];
+
     const reports = [
       { id: "r-dispatch", name: "Dispatch Queue", reportId: "Halo Report 1042" },
       { id: "r-emergency", name: "Escalations", reportId: "Halo Report 1088" },
@@ -861,14 +864,78 @@ const technicians = [
     async function loadHaloTechnicians() {
       if (!state.apiProxyUrl) return;
       const result = await callHalo("loadTechnicians", {
-        technicianIds: technicians.map(tech => tech.id),
-        teamIds: teams.filter(team => team.id !== "all").map(team => team.id)
+        technicianIds: haloTechnicianIds,
+        teamIds: haloTeamIds
       });
-      if (!result?.ok || !result.data?.technicians?.length) return;
-      syncHaloTechnicians(result.data);
+      let data = result?.data;
+      if (!data?.technicians?.length) {
+        data = await loadHaloTechniciansFromAgentEndpoint();
+      }
+      if (!data?.technicians?.length) {
+        toast("Halo names not loaded", "No agents matched the configured tech IDs, team IDs, and in_section rule.");
+        return;
+      }
+      syncHaloTechnicians(data);
       renderTeamSelect();
       renderTechPicker();
       renderBoard();
+      toast("Halo names loaded", `${data.technicians.length} technicians matched the configured teams.`);
+    }
+
+    async function loadHaloTechniciansFromAgentEndpoint() {
+      try {
+        const response = await fetch(`${state.apiProxyUrl.replace(/\/$/, "")}/api/halo/Agent`);
+        const result = await response.json().catch(() => ({}));
+        if (!response.ok) {
+          throw new Error(result.error || `HaloPSA proxy returned ${response.status}`);
+        }
+        return normalizeHaloAgents(result.data || result);
+      } catch (error) {
+        console.error(error);
+        toast("Halo technician load failed", error.message);
+        return null;
+      }
+    }
+
+    function normalizeHaloAgents(data) {
+      const agents = unwrapList(data);
+      const allowedTechs = new Set(haloTechnicianIds);
+      const allowedTeams = new Set(haloTeamIds);
+      const teamMap = new Map();
+
+      const matchedTechnicians = agents
+        .filter(agent => allowedTechs.has(String(agent.id)))
+        .map(agent => {
+          const memberships = Array.isArray(agent.teams) ? agent.teams : [];
+          const matchingTeams = memberships.filter(team => {
+            const teamId = String(team.team_id ?? team.id ?? "");
+            return allowedTeams.has(teamId) && isTrue(team.in_section);
+          });
+          if (!matchingTeams.length) return null;
+
+          matchingTeams.forEach(team => {
+            const teamId = String(team.team_id ?? team.id ?? "");
+            teamMap.set(teamId, {
+              id: teamId,
+              name: team.name || team.team || team.team_name || (String(agent.team_id) === teamId ? agent.team : "") || `Team ${teamId}`
+            });
+          });
+
+          const primaryTeam = matchingTeams[0];
+          const primaryTeamId = String(primaryTeam.team_id ?? primaryTeam.id ?? "");
+          return {
+            id: String(agent.id),
+            name: agent.name || agent.display_name || agent.email || `Technician ${agent.id}`,
+            teamId: primaryTeamId,
+            team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`
+          };
+        })
+        .filter(Boolean);
+
+      return {
+        technicians: matchedTechnicians,
+        teams: Array.from(teamMap.values()).sort((a, b) => Number(a.id) - Number(b.id))
+      };
     }
 
     function syncHaloTechnicians(data) {
@@ -892,6 +959,20 @@ const technicians = [
       if (!state.selectedTechs.length) {
         state.selectedTechs = technicians.map(tech => tech.id);
       }
+    }
+
+    function unwrapList(data) {
+      if (Array.isArray(data)) return data;
+      if (Array.isArray(data?.agents)) return data.agents;
+      if (Array.isArray(data?.users)) return data.users;
+      if (Array.isArray(data?.record)) return data.record;
+      if (Array.isArray(data?.records)) return data.records;
+      if (Array.isArray(data?.data)) return data.data;
+      return [];
+    }
+
+    function isTrue(value) {
+      return value === true || String(value).toLowerCase() === "true";
     }
 
     function refreshReports() {
