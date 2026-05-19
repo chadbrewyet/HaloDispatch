@@ -51,6 +51,17 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
 
 7. In the dashboard, open Settings and set `Worker API URL` to the deployed Worker URL.
 
+## Automatic Worker Deploys
+
+The repository includes a GitHub Actions workflow that deploys the Cloudflare Worker when changes are pushed to `main` under `worker/**`, `wrangler.toml`, or the workflow file itself.
+
+Add these GitHub repository secrets before relying on automatic deploys:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+The API token should have permission to edit Workers for the Cloudflare account that owns `halo-dispatch-api`.
+
 ## Implemented HaloPSA API Mappings
 
 The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:

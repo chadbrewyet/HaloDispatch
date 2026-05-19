@@ -18,28 +18,15 @@ const technicians = [
     const haloTechnicianIds = ["4", "14", "17", "23", "25", "31", "39"];
     const haloTeamIds = ["1", "3", "11"];
 
-    const reports = [
-      { id: "r-dispatch", name: "Dispatch Queue", reportId: "Halo Report 1042" },
-      { id: "r-emergency", name: "Escalations", reportId: "Halo Report 1088" },
-      { id: "r-onsite", name: "Ready for Onsite", reportId: "Halo Report 1120" }
-    ];
+    const reports = [];
 
-    const tickets = [
-      { id: 23891, client: "Northwind Dental", title: "Front desk workstation cannot print", priority: "P2", type: "Break/Fix", report: "r-dispatch", site: "Plano", sla: "Due 10:30 AM", estimate: "45m", contact: "Megan H.", details: "Printer queue is stuck after Windows update. Client has two front desk users blocked.", dateField: "", assignedTo: "" },
-      { id: 23896, client: "Lakeside Clinic", title: "Exam room Wi-Fi drops intermittently", priority: "P1", type: "Break/Fix", report: "r-emergency", site: "Dallas", sla: "Due 9:45 AM", estimate: "1h", contact: "Dr. Samuels", details: "Access point logs show repeated client disconnects near rooms 3 and 4.", dateField: "", assignedTo: "" },
-      { id: 23901, client: "Harbor Logistics", title: "Warehouse scanner replacement", priority: "P3", type: "Maintenance", report: "r-onsite", site: "Irving", sla: "Due Friday", estimate: "30m", contact: "Luis R.", details: "Replacement scanner is ready. Needs pairing, test scan, and asset tag update.", dateField: "", assignedTo: "" },
-      { id: 23907, client: "BrightPath CPA", title: "New hire laptop deployment", priority: "P2", type: "Project", report: "r-dispatch", site: "Fort Worth", sla: "Due 2:00 PM", estimate: "1.5h", contact: "Nina K.", details: "Laptop is imaged. Need desk setup, MFA enrollment, and printer mapping.", dateField: "", assignedTo: "" },
-      { id: 23908, client: "Austin & Grey Law", title: "Conference room camera issue", priority: "P2", type: "Break/Fix", report: "r-dispatch", site: "Dallas", sla: "Due 3:30 PM", estimate: "30m", contact: "Dana A.", details: "Camera detected in device manager but Teams does not list it.", dateField: "", assignedTo: "" },
-      { id: 23912, client: "Metro Fabrication", title: "Firewall firmware maintenance", priority: "P3", type: "Maintenance", report: "r-onsite", site: "Arlington", sla: "Due Today", estimate: "1h", contact: "Tom B.", details: "Approved maintenance window is after lunch. Confirm backups before update.", dateField: "", assignedTo: "" },
-      { id: 23916, client: "Cedar Ridge School", title: "Projector audio not passing HDMI", priority: "P3", type: "Break/Fix", report: "r-dispatch", site: "Richardson", sla: "Due Tomorrow", estimate: "30m", contact: "Ellen P.", details: "Teacher reports video works but audio plays through laptop speakers.", dateField: "", assignedTo: "" },
-      { id: 23919, client: "Summit Realty", title: "Boardroom display mount inspection", priority: "P2", type: "Project", report: "r-onsite", site: "Frisco", sla: "Due 4:00 PM", estimate: "1h", contact: "Rachel C.", details: "Inspect wall backing and confirm parts for Friday install.", dateField: "", assignedTo: "" }
-    ];
+    const tickets = [];
 
     const state = {
       selectedTechs: ["4", "14", "17"],
       team: "1",
       orientation: "horizontal",
-      reportLists: ["r-dispatch", "r-emergency"],
+      reportLists: [],
       visibleFields: ["client", "sla", "estimate"],
       workingHours: [8, 17],
       colorBy: "priority",
@@ -50,12 +37,7 @@ const technicians = [
       apiProxyUrl: "",
       pendingAppointment: null,
       activeTicketId: null,
-      boardItems: [
-        { ticketId: 23912, techId: "14", kind: "allDay", label: "Firmware maintenance", date: "" },
-        { ticketId: 23907, techId: "4", kind: "timed", time: "09:00", duration: 60, date: "" },
-        { ticketId: 23919, techId: "14", kind: "timed", time: "15:00", duration: 60, date: "" },
-        { ticketId: 23901, techId: "4", kind: "noTime", label: "Scanner replacement", date: "" }
-      ]
+      boardItems: []
     };
 
     const fieldOptions = [
@@ -233,6 +215,10 @@ const technicians = [
     }
 
     function renderReportLists() {
+      if (!reports.length) {
+        $("reportLists").innerHTML = `<div class="empty">No Halo report lists configured yet.</div>`;
+        return;
+      }
       $("reportLists").innerHTML = state.reportLists.map((reportId, index) => renderReportList(reportId, index)).join("");
       $("reportLists").querySelectorAll("[data-report-select]").forEach(select => {
         select.addEventListener("change", () => {
@@ -818,6 +804,10 @@ const technicians = [
     }
 
     function addReportList() {
+      if (!reports.length) {
+        toast("No reports configured", "Add published Halo report IDs before adding ticket lists.");
+        return;
+      }
       if (state.reportLists.length >= 3) {
         toast("List limit reached", "You can show up to 3 report-backed ticket lists.");
         return;
