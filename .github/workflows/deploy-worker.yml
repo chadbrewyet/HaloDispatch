@@ -1,5 +1,5 @@
 name: Deploy Cloudflare Worker
-# Touch this workflow to manually redeploy the Worker when Cloudflare secrets change.
+# Touch this workflow to manually redeploy the Worker after Cloudflare settings change.
 
 on:
   push:
