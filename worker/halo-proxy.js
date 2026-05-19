@@ -41,6 +41,11 @@ export default {
 
 async function handleDashboardAction(body, env) {
   const { action, payload = {} } = body || {};
+
+  if (action === "refreshReports") {
+    return handleReportRefresh(payload, env);
+  }
+
   const mapped = mapDashboardAction(action, payload, env);
 
   if (!mapped) {
@@ -53,6 +58,15 @@ async function handleDashboardAction(body, env) {
     };
   }
 
+  if (mapped.localOnly) {
+    return {
+      ok: true,
+      mode: "local-only",
+      action: mapped.action,
+      message: mapped.message
+    };
+  }
+
   return haloRequest(env, mapped.path, {
     method: mapped.method,
     body: mapped.body
@@ -61,21 +75,150 @@ async function handleDashboardAction(body, env) {
 
 function mapDashboardAction(action, payload, env) {
   switch (action) {
-    case "refreshReports":
-      return null;
     case "createAppointment":
-      return null;
+      return {
+        method: "POST",
+        path: "/api/Appointment",
+        body: [appointmentPayload(payload, env, { allDay: false })]
+      };
     case "updateAppointment":
-      return null;
+      if (!payload.appointmentId) {
+        return {
+          localOnly: true,
+          action,
+          message: "Halo appointment updates need the existing appointment_id. Load live Halo appointments before enabling persisted drag-to-reschedule."
+        };
+      }
+      return {
+        method: "POST",
+        path: "/api/Appointment",
+        body: [appointmentPayload(payload, env, { appointmentId: payload.appointmentId, allDay: false })]
+      };
     case "createAllDayTask":
     case "moveToAllDayTask":
-      return null;
+      return {
+        method: "POST",
+        path: "/api/Appointment",
+        body: [appointmentPayload(payload, env, { appointmentId: payload.appointmentId, allDay: true })]
+      };
     case "assignTicketDateOnly":
     case "moveToDateOnlyTask":
-      return null;
+      return {
+        method: "POST",
+        path: "/api/Tickets",
+        body: [ticketAssignmentPayload(payload, env)]
+      };
     default:
       return null;
   }
+}
+
+async function handleReportRefresh(payload, env) {
+  const reports = (payload.reports || [])
+    .map(reportPublishedId)
+    .filter(Boolean);
+
+  if (!reports.length) {
+    return {
+      ok: true,
+      mode: "configuration-needed",
+      message: "Add Halo published report IDs in the dashboard settings before loading live report data.",
+      reports: []
+    };
+  }
+
+  const results = [];
+  for (const publishedId of reports) {
+    const result = await haloRequest(env, `/api/ReportData/${encodeURIComponent(publishedId)}`, { method: "GET" });
+    results.push({ publishedId, data: result.data });
+  }
+
+  return { ok: true, reports: results };
+}
+
+function appointmentPayload(payload, env, options = {}) {
+  const startTime = payload.startTime || "00:00";
+  const duration = Number(payload.durationMinutes || 30);
+  const startDate = options.allDay ? `${payload.date}T00:00:00` : combineDateTime(payload.date, startTime);
+  const endDate = options.allDay ? `${payload.date}T23:59:59` : combineDateTime(payload.date, addMinutes(startTime, duration));
+
+  return compactObject({
+    id: options.appointmentId ? Number(options.appointmentId) : undefined,
+    ticket_id: Number(payload.ticketId),
+    agent_id: haloAgentId(payload.technicianId, env),
+    start_date: startDate,
+    end_date: endDate,
+    allday: Boolean(options.allDay),
+    note: payload.notes || undefined,
+    status: payload.status || undefined,
+    appointment_type_id: env.HALO_APPOINTMENT_TYPE_ID ? Number(env.HALO_APPOINTMENT_TYPE_ID) : undefined,
+    reassign_ticket: payload.assignTicket !== false
+  });
+}
+
+function ticketAssignmentPayload(payload, env) {
+  const dateFieldId = env.HALO_DISPATCH_DATE_FIELD_ID;
+  if (!dateFieldId) {
+    throw new Error("Missing Worker variable: HALO_DISPATCH_DATE_FIELD_ID");
+  }
+
+  return {
+    id: Number(payload.ticketId),
+    agent_id: haloAgentId(payload.technicianId, env),
+    customfields: [
+      {
+        id: Number(dateFieldId),
+        value: payload.dateFieldValue || payload.date
+      }
+    ]
+  };
+}
+
+function haloAgentId(technicianId, env) {
+  const mappedAgents = parseJsonEnv(env.TECHNICIAN_MAP_JSON, {});
+  const mapped = mappedAgents[technicianId];
+  if (mapped) return Number(mapped);
+
+  if (/^\d+$/.test(String(technicianId))) {
+    return Number(technicianId);
+  }
+
+  throw new Error(`No Halo agent ID mapped for dashboard technician "${technicianId}"`);
+}
+
+function reportPublishedId(value) {
+  const match = String(value || "").match(/\d+/);
+  return match ? match[0] : "";
+}
+
+function combineDateTime(date, time) {
+  if (!date || !time) {
+    throw new Error("Appointments require both date and startTime.");
+  }
+  return `${date}T${time}:00`;
+}
+
+function addMinutes(time, minutes) {
+  const [hour, minute] = time.split(":").map(Number);
+  const total = (hour * 60) + minute + minutes;
+  const nextHour = Math.floor(total / 60) % 24;
+  const nextMinute = total % 60;
+  return `${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
+}
+
+function parseJsonEnv(value, fallback) {
+  if (!value) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    throw new Error("TECHNICIAN_MAP_JSON is not valid JSON.");
+  }
+}
+
+function compactObject(value) {
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== undefined && entry !== null && entry !== "")
+  );
 }
 
 async function haloRequest(env, path, options = {}) {

@@ -20,34 +20,52 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
 
 1. Install Wrangler locally or use Cloudflare's dashboard/deployment flow.
 2. Copy `wrangler.toml.example` to `wrangler.toml`.
-3. Fill in your HaloPSA API details from:
+3. Confirm your HaloPSA API details from:
 
    `HaloPSA > Configuration > Integrations > HaloPSA API > API Details`
 
-4. Store secrets:
+   The current tenant Swagger spec is available at:
+
+   `https://gagepsa.halopsa.com/api/swagger/v2/swagger.json`
+
+4. Update the Worker variables in `wrangler.toml`:
+
+   - `TECHNICIAN_MAP_JSON` maps dashboard technician IDs to Halo agent IDs.
+   - `HALO_DISPATCH_DATE_FIELD_ID` is the custom ticket date field used by the without-time section.
+   - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
+
+5. Store secrets:
 
    ```powershell
    wrangler secret put HALO_CLIENT_ID
    wrangler secret put HALO_CLIENT_SECRET
    ```
 
-5. Deploy:
+6. Deploy:
 
    ```powershell
    wrangler deploy
    ```
 
-6. In the dashboard, open Settings and set `Worker API URL` to the deployed Worker URL.
+7. In the dashboard, open Settings and set `Worker API URL` to the deployed Worker URL.
+
+## Implemented HaloPSA API Mappings
+
+The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
+
+- report refresh: `GET /api/ReportData/{publishedid}`
+- timed appointment creation: `POST /api/Appointment`
+- all-day task creation: `POST /api/Appointment`
+- without-time assignment: `POST /api/Tickets`
+
+Moving an already scheduled appointment to a new time or technician is ready in the UI, but the Worker intentionally returns `local-only` until the dashboard is loading and storing real Halo `appointment_id` values. That avoids creating duplicate appointments while testing.
 
 ## Still Needed From HaloPSA
 
-To wire the real drag/drop actions, we need the tenant-specific `/apidoc` details for:
+To finish the live integration, we still need:
 
-- report execution / report result endpoint
-- ticket update endpoint and payload shape for assigning an agent
-- appointment creation endpoint and payload shape
-- all-day task creation endpoint and payload shape
-- custom ticket date field ID and update shape
-- ticket deep-link URL format
-
-Until those endpoint mappings are added in `worker/halo-proxy.js`, the Worker accepts dashboard actions and returns an `unmapped` response instead of calling HaloPSA.
+- real Halo agent IDs for each visible technician
+- published report IDs for the ticket lists
+- the custom ticket date field ID for without-time tasks
+- the ticket deep-link URL format
+- live appointment loading so scheduled cards include `appointment_id` for persisted rescheduling
