@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Halo Dispatch Board</title>
+  <link rel="stylesheet" href="assets/styles.css">
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">DB</div>
+        <div>Digital Dispatch Board</div>
+      </div>
+      <div class="date-controls" aria-label="Date controls">
+        <button class="icon" id="prevDay" title="Previous day">&lt;</button>
+        <input id="boardDate" type="date">
+        <button class="icon" id="nextDay" title="Next day">&gt;</button>
+        <button id="todayBtn">Today</button>
+      </div>
+      <div class="api-status">
+        <span class="api-pill" id="apiState">HaloPSA mock mode</span>
+      </div>
+      <div class="view-controls">
+        <div class="segmented" aria-label="Board orientation">
+          <button id="horizontalBtn" class="active">Horizontal</button>
+          <button id="verticalBtn">Vertical</button>
+        </div>
+        <button id="settingsBtn" title="Settings">Settings</button>
+      </div>
+    </header>
+
+    <main class="workspace">
+      <aside class="left-panel">
+        <div class="panel-head">
+          <h2>Service Tickets</h2>
+          <button id="addListBtn">Add List</button>
+        </div>
+        <div class="report-lists" id="reportLists"></div>
+      </aside>
+
+      <section class="main-panel">
+        <div class="filters">
+          <div class="field">
+            <label>Technicians</label>
+            <div class="tech-picker" id="techPicker"></div>
+          </div>
+          <div class="field">
+            <label>Team</label>
+            <select id="teamSelect"></select>
+          </div>
+          <div class="field">
+            <label>Working Hours</label>
+            <select id="hoursSelect">
+              <option value="7,17">7:00 AM - 5:00 PM</option>
+              <option value="8,17" selected>8:00 AM - 5:00 PM</option>
+              <option value="8,18">8:00 AM - 6:00 PM</option>
+              <option value="9,18">9:00 AM - 6:00 PM</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Card Colors</label>
+            <select id="colorBySelect">
+              <option value="priority" selected>Priority</option>
+              <option value="sla">SLA Remaining</option>
+              <option value="type">Ticket Type</option>
+            </select>
+          </div>
+          <button id="refreshBtn" class="primary">Refresh Reports</button>
+        </div>
+        <div class="board-wrap">
+          <div class="board horizontal" id="dispatchBoard"></div>
+        </div>
+      </section>
+    </main>
+
+    <section class="bottom-pool" data-resize-key="pool">
+      <div class="pool-resizer" data-resizer-for="pool" title="Drag to resize ticket pool"></div>
+      <div class="bottom-head">
+        <h2>Filtered Ticket Pool</h2>
+        <input id="poolSearch" type="search" placeholder="Search tickets, clients, summaries">
+        <select id="poolPriority">
+          <option value="">Any Priority</option>
+          <option value="P1">P1</option>
+          <option value="P2">P2</option>
+          <option value="P3">P3</option>
+        </select>
+        <select id="poolType">
+          <option value="">Any Type</option>
+          <option value="Break/Fix">Break/Fix</option>
+          <option value="Project">Project</option>
+          <option value="Maintenance">Maintenance</option>
+        </select>
+        <select id="poolViewSelect" title="Ticket pool view">
+          <option value="card">Cards</option>
+          <option value="list">List</option>
+        </select>
+        <button id="clearFiltersBtn">Clear</button>
+      </div>
+      <div class="pool-list" id="poolList"></div>
+    </section>
+  </div>
+
+  <aside class="config-drawer" id="configDrawer" aria-label="Dispatch board settings">
+    <div class="panel-head">
+      <h2>Board Settings</h2>
+      <button class="icon" id="closeSettingsBtn" title="Close settings">x</button>
+    </div>
+    <div class="drawer-body">
+      <section class="settings-card">
+        <h3>Appearance</h3>
+        <div class="field">
+          <label>Theme</label>
+          <select id="themeSelect">
+            <option value="light">Light</option>
+            <option value="dark">Dark</option>
+          </select>
+        </div>
+      </section>
+      <section class="settings-card">
+        <h3>Ticket Card Fields</h3>
+        <p style="margin:0;color:var(--muted);font-size:13px;">Choose what appears directly on cards. Right-click a ticket for quick details, or double-click to open the larger ticket view.</p>
+        <div class="checks" id="fieldChecks"></div>
+      </section>
+      <section class="settings-card">
+        <h3>HaloPSA Connection</h3>
+        <div class="field">
+          <label>Worker API URL</label>
+          <input id="apiProxyUrl" placeholder="https://halo-dispatch-api.your-subdomain.workers.dev">
+        </div>
+        <div class="field">
+          <label>Halo Ticket URL Base</label>
+          <input id="apiBaseUrl" placeholder="https://yourtenant.halopsa.com">
+        </div>
+        <div class="field">
+          <label>Report ID Source</label>
+          <input id="reportHint" placeholder="Paste report IDs when ready">
+        </div>
+        <button id="saveApiBtn" class="primary">Save Connection Draft</button>
+      </section>
+      <section class="settings-card">
+        <h3>API Action Map</h3>
+        <div class="empty" style="text-align:left;">
+          All-day drop: create all-day task, assign technician.<br>
+          Timed drop: open appointment modal, then create appointment and assign technician.<br>
+          No-time drop: assign technician and update the configured ticket date field.
+        </div>
+      </section>
+    </div>
+  </aside>
+
+  <div class="modal-backdrop" id="appointmentModal">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="appointmentTitle">
+      <div class="panel-head">
+        <h2 id="appointmentTitle">Schedule Appointment</h2>
+        <button class="icon" id="closeModalBtn" title="Close appointment modal">x</button>
+      </div>
+      <div class="modal-body">
+        <div class="modal-grid">
+          <div class="field">
+            <label>Ticket</label>
+            <input id="modalTicket" readonly>
+          </div>
+          <div class="field">
+            <label>Technician</label>
+            <input id="modalTech" readonly>
+          </div>
+          <div class="field">
+            <label>Start</label>
+            <input id="modalStart" type="time">
+          </div>
+          <div class="field">
+            <label>Duration</label>
+            <select id="modalDuration">
+              <option value="30" selected>30 minutes</option>
+              <option value="60">1 hour</option>
+              <option value="90">1.5 hours</option>
+              <option value="120">2 hours</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Status</label>
+            <select id="modalStatus">
+              <option>Scheduled</option>
+              <option>Tentative</option>
+              <option>Waiting on Client</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Location</label>
+            <input id="modalLocation">
+          </div>
+        </div>
+        <div class="field">
+          <label>Appointment Notes</label>
+          <textarea id="modalNotes" rows="3"></textarea>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="cancelAppointmentBtn">Cancel</button>
+        <button id="saveAppointmentBtn" class="primary">Create Appointment</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="ticketModal">
+    <div class="modal ticket-modal" role="dialog" aria-modal="true" aria-labelledby="ticketModalTitle">
+      <div class="panel-head">
+        <h2 id="ticketModalTitle">Ticket Details</h2>
+        <button class="icon" id="closeTicketModalBtn" title="Close ticket modal">x</button>
+      </div>
+      <div class="ticket-modal-body" id="ticketModalBody"></div>
+      <div class="modal-actions">
+        <button id="ticketExternalBtn">Open HaloPSA URL</button>
+        <button id="ticketModalDoneBtn" class="primary">Done</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="zone-modal" id="zoneModal" aria-live="polite">
+    <div class="zone-modal-head">
+      <div class="zone-modal-title" id="zoneModalTitle"></div>
+      <button class="icon" id="zoneModalClose" title="Collapse section">x</button>
+    </div>
+    <div class="zone-items" id="zoneModalBody"></div>
+  </div>
+
+  <div class="ticket-popover" id="ticketPopover"></div>
+
+  <div class="toast-log" id="toastLog" aria-live="polite"></div>
+
+  <script src="assets/app.js"></script>
+</body>
+</html>
