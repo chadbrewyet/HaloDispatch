@@ -229,11 +229,38 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       overflow: auto;
-      resize: vertical;
       min-height: 172px;
       max-height: 70vh;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .section-resizer {
+      height: 10px;
+      margin: -2px 8px 2px;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      cursor: row-resize;
+      display: grid;
+      place-items: center;
+    }
+
+    .section-resizer::before {
+      content: "";
+      width: 48px;
+      height: 3px;
+      border-radius: 999px;
+      background: var(--line-strong);
+    }
+
+    .section-resizer:hover {
+      border-color: var(--line);
+      background: var(--soft);
+    }
+
+    .section-resizer.active {
+      border-color: var(--accent);
+      background: var(--soft);
     }
 
     .report-list header {
@@ -795,8 +822,33 @@
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       min-height: 0;
-      resize: vertical;
       overflow: hidden;
+      position: relative;
+    }
+
+    .pool-resizer {
+      position: absolute;
+      top: -6px;
+      left: 0;
+      right: 0;
+      height: 12px;
+      z-index: 10;
+      cursor: row-resize;
+      display: grid;
+      place-items: center;
+    }
+
+    .pool-resizer::before {
+      content: "";
+      width: 82px;
+      height: 4px;
+      border-radius: 999px;
+      background: var(--line-strong);
+    }
+
+    .pool-resizer:hover::before,
+    .pool-resizer.active::before {
+      background: var(--accent);
     }
 
     .bottom-head {
@@ -1070,6 +1122,7 @@
     </main>
 
     <section class="bottom-pool" data-resize-key="pool">
+      <div class="pool-resizer" data-resizer-for="pool" title="Drag to resize ticket pool"></div>
       <div class="bottom-head">
         <h2>Filtered Ticket Pool</h2>
         <input id="poolSearch" type="search" placeholder="Search tickets, clients, summaries">
@@ -1297,6 +1350,7 @@
       renderPool();
       applySavedSectionSizes();
       observeResizableSections();
+      wireSectionResizers();
       bindEvents();
       toast("Ready", "Single-file dispatch board loaded with mock HaloPSA actions.");
     }
@@ -1458,6 +1512,7 @@
         });
       });
       observeResizableSections();
+      wireSectionResizers();
       makeTicketsDraggable();
     }
 
@@ -1486,6 +1541,7 @@
             ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets in this report.</div>`}
           </div>
         </section>
+        ${index < state.reportLists.length - 1 ? `<div class="section-resizer" data-resizer-for="${key}" title="Drag to resize this ticket list"></div>` : ""}
       `;
     }
 
@@ -1629,6 +1685,7 @@
       $("poolList").innerHTML = filtered.length ? filtered.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets match the current filters.</div>`;
       applySavedSectionSizes();
       observeResizableSections();
+      wireSectionResizers();
       makeTicketsDraggable();
     }
 
@@ -1638,12 +1695,7 @@
 
     function applySavedSectionSizes() {
       Object.entries(state.sectionSizes).forEach(([key, height]) => {
-        if (key === "pool") {
-          document.documentElement.style.setProperty("--bottom-height", `${height}px`);
-        }
-        document.querySelectorAll(`[data-resize-key="${key}"]`).forEach(section => {
-          section.style.height = `${height}px`;
-        });
+        setSectionHeight(key, height);
       });
     }
 
@@ -1665,6 +1717,52 @@
         state.resizeSaveTimer = setTimeout(saveLocalSettings, 250);
       });
       document.querySelectorAll("[data-resize-key]").forEach(section => state.resizeObserver.observe(section));
+    }
+
+    function wireSectionResizers() {
+      document.querySelectorAll("[data-resizer-for]").forEach(handle => {
+        handle.addEventListener("pointerdown", event => {
+          event.preventDefault();
+          startSectionResize(handle, event.clientY);
+        });
+      });
+    }
+
+    function startSectionResize(handle, startY) {
+      const key = handle.dataset.resizerFor;
+      const section = document.querySelector(`[data-resize-key="${key}"]`);
+      if (!section) return;
+      const startHeight = key === "pool" ? section.getBoundingClientRect().height : section.offsetHeight;
+      const resizingPool = key === "pool";
+      handle.classList.add("active");
+
+      function onMove(event) {
+        const delta = resizingPool ? startY - event.clientY : event.clientY - startY;
+        const min = resizingPool ? 120 : 172;
+        const max = resizingPool ? Math.round(window.innerHeight * 0.45) : Math.round(window.innerHeight * 0.7);
+        const nextHeight = Math.max(min, Math.min(max, Math.round(startHeight + delta)));
+        setSectionHeight(key, nextHeight);
+      }
+
+      function onUp() {
+        handle.classList.remove("active");
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+        saveLocalSettings();
+      }
+
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
+    }
+
+    function setSectionHeight(key, height) {
+      state.sectionSizes[key] = height;
+      if (key === "pool") {
+        document.documentElement.style.setProperty("--bottom-height", `${height}px`);
+      }
+      document.querySelectorAll(`[data-resize-key="${key}"]`).forEach(section => {
+        section.style.height = `${height}px`;
+      });
     }
 
     function wireDropZones() {
