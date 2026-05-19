@@ -46,6 +46,10 @@ async function handleDashboardAction(body, env) {
     return handleReportRefresh(payload, env);
   }
 
+  if (action === "loadTechnicians") {
+    return handleTechnicianLoad(payload, env);
+  }
+
   const mapped = mapDashboardAction(action, payload, env);
 
   if (!mapped) {
@@ -111,6 +115,53 @@ function mapDashboardAction(action, payload, env) {
     default:
       return null;
   }
+}
+
+async function handleTechnicianLoad(payload, env) {
+  const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "4,14,17,23,25,31,39");
+  const configuredTeamIds = parseListEnv(env.HALO_TEAM_IDS || "1,3,11");
+  const technicianIds = new Set((payload.technicianIds?.length ? payload.technicianIds : configuredTechnicianIds).map(String));
+  const teamIds = new Set((payload.teamIds?.length ? payload.teamIds : configuredTeamIds).map(String));
+  const response = await haloRequest(env, "/api/Agent", { method: "GET" });
+  const agents = unwrapList(response.data);
+  const teamMap = new Map();
+
+  const technicians = agents
+    .filter(agent => technicianIds.has(String(agent.id)))
+    .map(agent => {
+      const memberships = Array.isArray(agent.teams) ? agent.teams : [];
+      const matchingTeams = memberships.filter(team => {
+        const teamId = String(team.team_id ?? team.id ?? "");
+        return teamIds.has(teamId) && team.in_section === true;
+      });
+      if (!matchingTeams.length) return null;
+
+      const primaryTeam = matchingTeams[0];
+      matchingTeams.forEach(team => {
+        const teamId = String(team.team_id ?? team.id ?? "");
+        teamMap.set(teamId, {
+          id: teamId,
+          name: team.name || team.team || team.team_name || (String(agent.team_id) === teamId ? agent.team : "") || `Team ${teamId}`
+        });
+      });
+
+      const primaryTeamId = String(primaryTeam.team_id ?? primaryTeam.id ?? "");
+      return {
+        id: String(agent.id),
+        name: agent.name || agent.display_name || agent.email || `Technician ${agent.id}`,
+        teamId: primaryTeamId,
+        team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`
+      };
+    })
+    .filter(Boolean);
+
+  return {
+    ok: true,
+    data: {
+      technicians,
+      teams: Array.from(teamMap.values()).sort((a, b) => Number(a.id) - Number(b.id))
+    }
+  };
 }
 
 async function handleReportRefresh(payload, env) {
@@ -214,6 +265,23 @@ function parseJsonEnv(value, fallback) {
   } catch {
     throw new Error("TECHNICIAN_MAP_JSON is not valid JSON.");
   }
+}
+
+function parseListEnv(value) {
+  return String(value || "")
+    .split(",")
+    .map(item => item.trim())
+    .filter(Boolean);
+}
+
+function unwrapList(data) {
+  if (Array.isArray(data)) return data;
+  if (Array.isArray(data?.agents)) return data.agents;
+  if (Array.isArray(data?.users)) return data.users;
+  if (Array.isArray(data?.record)) return data.record;
+  if (Array.isArray(data?.records)) return data.records;
+  if (Array.isArray(data?.data)) return data.data;
+  return [];
 }
 
 function compactObject(value) {

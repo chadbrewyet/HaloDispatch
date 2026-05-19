@@ -30,6 +30,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
 
 4. Update the Worker variables in `wrangler.toml`:
 
+   - `HALO_TECHNICIAN_IDS` lists the Halo agents visible on the dispatch board.
    - `TECHNICIAN_MAP_JSON` maps dashboard technician IDs to Halo agent IDs.
    - `HALO_TEAM_IDS` lists the Halo teams available for team selection.
    - `HALO_DISPATCH_DATE_FIELD_ID` is the custom ticket date field used by the without-time section.
@@ -63,10 +64,12 @@ Moving an already scheduled appointment to a new time or technician is ready in 
 
 Current Halo configuration:
 
-- technician IDs: `3`, `14`, `17`, `23`, `25`, `31`, `39`
+- technician IDs: `4`, `14`, `17`, `23`, `25`, `31`, `39`
 - team IDs: `1`, `3`, `11`
 - without-time task date field: `CFTaskWithoutTimeDate` / `486`
 - ticket URL prefix: `https://gagepsa.halopsa.com/ticket?id=`
+
+Technician and team display names are loaded from `GET /api/Agent`. A technician is included only when the agent ID is configured and the agent has a `teams` array entry where `team_id` is one of the configured team IDs and `in_section` is `true`.
 
 ## Still Needed From HaloPSA
 

@@ -1,5 +1,5 @@
 const technicians = [
-      { id: "3", name: "Technician 3", teamId: "1", team: "Team 1" },
+      { id: "4", name: "Technician 4", teamId: "1", team: "Team 1" },
       { id: "14", name: "Technician 14", teamId: "1", team: "Team 1" },
       { id: "17", name: "Technician 17", teamId: "1", team: "Team 1" },
       { id: "23", name: "Technician 23", teamId: "3", team: "Team 3" },
@@ -33,7 +33,7 @@ const technicians = [
     ];
 
     const state = {
-      selectedTechs: ["3", "14", "17"],
+      selectedTechs: ["4", "14", "17"],
       team: "1",
       orientation: "horizontal",
       reportLists: ["r-dispatch", "r-emergency"],
@@ -49,9 +49,9 @@ const technicians = [
       activeTicketId: null,
       boardItems: [
         { ticketId: 23912, techId: "14", kind: "allDay", label: "Firmware maintenance", date: "" },
-        { ticketId: 23907, techId: "3", kind: "timed", time: "09:00", duration: 60, date: "" },
+        { ticketId: 23907, techId: "4", kind: "timed", time: "09:00", duration: 60, date: "" },
         { ticketId: 23919, techId: "14", kind: "timed", time: "15:00", duration: 60, date: "" },
-        { ticketId: 23901, techId: "3", kind: "noTime", label: "Scanner replacement", date: "" }
+        { ticketId: 23901, techId: "4", kind: "noTime", label: "Scanner replacement", date: "" }
       ]
     };
 
@@ -87,6 +87,7 @@ const technicians = [
       wireSectionResizers();
       bindEvents();
       toast("Ready", "Dispatch board loaded. HaloPSA actions run in mock mode until a Worker API URL is saved.");
+      loadHaloTechnicians();
     }
 
     function bindEvents() {
@@ -189,7 +190,8 @@ const technicians = [
 
     function renderTeamSelect() {
       $("teamSelect").innerHTML = teams.map(team => `<option value="${team.id}">${team.name}</option>`).join("");
-      $("teamSelect").value = state.team;
+      $("teamSelect").value = teams.some(team => team.id === state.team) ? state.team : "all";
+      state.team = $("teamSelect").value;
     }
 
     function renderTechPicker() {
@@ -853,6 +855,43 @@ const technicians = [
       $("apiState").textContent = state.apiProxyUrl ? "HaloPSA Worker connected" : "HaloPSA mock mode";
       saveLocalSettings();
       toast("Connection settings saved", state.apiProxyUrl || "Mock mode remains active until the Worker URL is added.");
+      loadHaloTechnicians();
+    }
+
+    async function loadHaloTechnicians() {
+      if (!state.apiProxyUrl) return;
+      const result = await callHalo("loadTechnicians", {
+        technicianIds: technicians.map(tech => tech.id),
+        teamIds: teams.filter(team => team.id !== "all").map(team => team.id)
+      });
+      if (!result?.ok || !result.data?.technicians?.length) return;
+      syncHaloTechnicians(result.data);
+      renderTeamSelect();
+      renderTechPicker();
+      renderBoard();
+    }
+
+    function syncHaloTechnicians(data) {
+      technicians.splice(0, technicians.length, ...data.technicians.map(tech => ({
+        id: String(tech.id),
+        name: tech.name || `Technician ${tech.id}`,
+        teamId: String(tech.teamId || ""),
+        team: tech.team || `Team ${tech.teamId || ""}`
+      })));
+
+      teams.splice(0, teams.length, { id: "all", name: "All Teams" }, ...data.teams.map(team => ({
+        id: String(team.id),
+        name: team.name || `Team ${team.id}`
+      })));
+
+      const availableTechIds = new Set(technicians.map(tech => tech.id));
+      state.selectedTechs = state.selectedTechs.filter(id => availableTechIds.has(id));
+      if (!state.selectedTechs.length) {
+        state.selectedTechs = technicians.filter(tech => tech.teamId === state.team).map(tech => tech.id);
+      }
+      if (!state.selectedTechs.length) {
+        state.selectedTechs = technicians.map(tech => tech.id);
+      }
     }
 
     function refreshReports() {

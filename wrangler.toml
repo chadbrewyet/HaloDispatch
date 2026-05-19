@@ -13,7 +13,8 @@ HALO_RESOURCE_SERVER = "https://gagepsa.halopsa.com"
 HALO_SCOPE = "all"
 
 # Dashboard technician IDs already match these Halo agent IDs.
-TECHNICIAN_MAP_JSON = "{\"3\":3,\"14\":14,\"17\":17,\"23\":23,\"25\":25,\"31\":31,\"39\":39}"
+HALO_TECHNICIAN_IDS = "4,14,17,23,25,31,39"
+TECHNICIAN_MAP_JSON = "{\"4\":4,\"14\":14,\"17\":17,\"23\":23,\"25\":25,\"31\":31,\"39\":39}"
 
 # Halo team IDs available for dashboard team selection.
 HALO_TEAM_IDS = "1,3,11"
