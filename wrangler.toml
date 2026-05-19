@@ -1,0 +1,13 @@
+name = "halo-dispatch-api"
+main = "worker/halo-proxy.js"
+compatibility_date = "2026-05-18"
+
+# Set these as encrypted Cloudflare Worker secrets:
+# wrangler secret put HALO_CLIENT_ID
+# wrangler secret put HALO_CLIENT_SECRET
+
+[vars]
+# Copy these values from HaloPSA > Configuration > Integrations > HaloPSA API > API Details.
+HALO_AUTH_URL = "https://YOUR_TENANT.halopsa.com/auth/token"
+HALO_RESOURCE_SERVER = "https://YOUR_TENANT.halopsa.com"
+HALO_SCOPE = "all"
