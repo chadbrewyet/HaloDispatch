@@ -82,8 +82,12 @@ const technicians = [
       $("todayBtn").addEventListener("click", () => {
         $("boardDate").value = new Date().toISOString().slice(0, 10);
         renderAll();
+        loadHaloAppointments();
       });
-      $("boardDate").addEventListener("change", renderAll);
+      $("boardDate").addEventListener("change", () => {
+        renderAll();
+        loadHaloAppointments();
+      });
       $("teamSelect").addEventListener("change", selectTeam);
       $("hoursSelect").addEventListener("change", () => {
         state.workingHours = $("hoursSelect").value.split(",").map(Number);
@@ -194,6 +198,7 @@ const technicians = [
           state.selectedTechs = selected.length ? selected : [input.value];
           renderTechPicker();
           renderBoard();
+          loadHaloAppointments();
         });
       });
     }
@@ -387,14 +392,14 @@ const technicians = [
 
     function renderSmallEvent(item) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
-      return `<div class="small-event ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-drag-source="scheduled" data-kind="${item.kind}">#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
+      return `<div class="small-event ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
     }
 
     function renderAppointment(item) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
       return `
-        <div class="appointment ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-drag-source="scheduled" data-kind="timed">
-          <strong>#${item.ticketId} ${escapeHtml(ticket?.title || "Appointment")}</strong>
+        <div class="appointment ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed">
+          <strong>#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Appointment")}</strong>
           <span>${escapeHtml(formatTime(item.time))} - ${item.duration || 30}m</span>
         </div>
       `;
@@ -660,6 +665,7 @@ const technicians = [
         technicianId: techId,
         previousStartTime: previous.time || null,
         startTime: time,
+        appointmentId: item.appointmentId || null,
         date: $("boardDate").value,
         assignTicket: previous.techId !== techId
       });
@@ -827,6 +833,7 @@ const technicians = [
       }
       renderTechPicker();
       renderBoard();
+      loadHaloAppointments();
     }
 
     function setOrientation(orientation) {
@@ -841,6 +848,7 @@ const technicians = [
       date.setDate(date.getDate() + days);
       $("boardDate").value = date.toISOString().slice(0, 10);
       renderAll();
+      loadHaloAppointments();
     }
 
     function saveApiSettings() {
@@ -873,6 +881,54 @@ const technicians = [
       renderTechPicker();
       renderBoard();
       toast("Halo names loaded", `${data.technicians.length} technicians matched the configured teams.`);
+      loadHaloAppointments();
+    }
+
+    async function loadHaloAppointments() {
+      if (!state.apiProxyUrl || !state.selectedTechs.length) return;
+      const result = await callHalo("loadAppointments", {
+        date: selectedDate(),
+        technicianIds: state.selectedTechs
+      }, { quiet: true });
+      if (!result?.ok) return;
+      syncHaloAppointments(result.data?.appointments || []);
+      renderBoard();
+      if (result.data?.appointments?.length) {
+        toast("Halo appointments loaded", `${result.data.appointments.length} calendar items matched this view.`);
+      }
+    }
+
+    function syncHaloAppointments(appointments) {
+      const visibleTechs = new Set(state.selectedTechs);
+      state.boardItems = state.boardItems.filter(item => {
+        const sameDate = item.date === selectedDate();
+        const sameTech = visibleTechs.has(item.techId);
+        return item.source !== "haloAppointment" || !sameDate || !sameTech;
+      });
+
+      appointments.forEach(appointment => {
+        hydrateTicketFromAppointment(appointment);
+        state.boardItems.push(appointment);
+      });
+    }
+
+    function hydrateTicketFromAppointment(appointment) {
+      if (tickets.some(ticket => ticket.id === appointment.ticketId)) return;
+      tickets.push({
+        id: appointment.ticketId,
+        client: "",
+        title: appointment.label || "Scheduled appointment",
+        priority: "",
+        type: "Appointment",
+        report: "",
+        site: "",
+        sla: "",
+        estimate: appointment.duration ? `${appointment.duration}m` : "",
+        contact: "",
+        details: appointment.label || "",
+        dateField: appointment.date,
+        assignedTo: appointment.techId
+      });
     }
 
     async function loadHaloTechniciansFromAgentEndpoint() {

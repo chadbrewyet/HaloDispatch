@@ -50,6 +50,10 @@ async function handleDashboardAction(body, env) {
     return handleTechnicianLoad(payload, env);
   }
 
+  if (action === "loadAppointments") {
+    return handleAppointmentLoad(payload, env);
+  }
+
   const mapped = mapDashboardAction(action, payload, env);
 
   if (!mapped) {
@@ -115,6 +119,71 @@ function mapDashboardAction(action, payload, env) {
     default:
       return null;
   }
+}
+
+async function handleAppointmentLoad(payload, env) {
+  const date = payload.date;
+  if (!date) {
+    throw new Error("Appointment load requires a date.");
+  }
+
+  const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "4,14,17,23,25,31,39");
+  const agentIds = (payload.technicianIds?.length ? payload.technicianIds : configuredTechnicianIds).map(String);
+  const params = new URLSearchParams({
+    start_date: `${date}T00:00:00`,
+    end_date: `${date}T23:59:59`,
+    agents: agentIds.join(","),
+    showall: "true",
+    showappointments: "true",
+    excluderecurringmaster: "true",
+    page_size: "500"
+  });
+
+  const response = await haloRequest(env, `/api/Appointment?${params.toString()}`, { method: "GET" });
+  const appointments = unwrapList(response.data)
+    .flatMap(appointment => normalizeAppointment(appointment, date, agentIds))
+    .filter(Boolean);
+
+  return {
+    ok: true,
+    data: { appointments }
+  };
+}
+
+function normalizeAppointment(appointment, date, allowedAgentIds) {
+  const ticketId = appointment.ticket_id ?? appointment.faultid ?? appointment.fault_id;
+  if (!ticketId) return [];
+
+  const agentIds = appointmentAgentIds(appointment).filter(agentId => allowedAgentIds.includes(agentId));
+  if (!agentIds.length) return [];
+
+  const startDate = appointment.start_date || appointment.startdate || appointment.start_date_only;
+  const endDate = appointment.end_date || appointment.enddate || appointment.end_date_only;
+  const startTime = timePart(startDate) || "00:00";
+  const duration = appointment.allday ? 1440 : durationMinutes(startDate, endDate);
+  const kind = appointment.allday ? "allDay" : "timed";
+  const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Ticket #${ticketId}`;
+
+  return agentIds.map(agentId => ({
+    appointmentId: String(appointment.id || appointment.appointment_id || ""),
+    ticketId: Number(ticketId),
+    techId: agentId,
+    kind,
+    time: kind === "timed" ? startTime : undefined,
+    duration,
+    date: datePart(startDate) || date,
+    label: stripHtml(title),
+    source: "haloAppointment"
+  }));
+}
+
+function appointmentAgentIds(appointment) {
+  const agents = Array.isArray(appointment.agents) ? appointment.agents : [];
+  const fromAgents = agents
+    .map(agent => agent.id ?? agent.agent_id)
+    .filter(value => value !== undefined && value !== null);
+  const primary = appointment.agent_id ? [appointment.agent_id] : [];
+  return Array.from(new Set([...primary, ...fromAgents].map(String)));
 }
 
 async function handleTechnicianLoad(payload, env) {
@@ -256,6 +325,31 @@ function addMinutes(time, minutes) {
   const nextHour = Math.floor(total / 60) % 24;
   const nextMinute = total % 60;
   return `${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
+}
+
+function durationMinutes(startDate, endDate) {
+  const start = Date.parse(startDate);
+  const end = Date.parse(endDate);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
+    return 30;
+  }
+  return Math.max(15, Math.round((end - start) / 60000));
+}
+
+function datePart(value) {
+  return String(value || "").slice(0, 10);
+}
+
+function timePart(value) {
+  const match = String(value || "").match(/T(\d{2}:\d{2})/);
+  return match ? match[1] : "";
+}
+
+function stripHtml(value) {
+  return String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function parseJsonEnv(value, fallback) {
