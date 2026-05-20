@@ -54,6 +54,18 @@ async function handleDashboardAction(body, env) {
     return handleAppointmentLoad(payload, env);
   }
 
+  if (action === "loadDateOnlyTasks") {
+    return handleDateOnlyTaskLoad(payload, env);
+  }
+
+  if (action === "moveAppointmentToDateOnly") {
+    return handleMoveAppointmentToDateOnly(payload, env);
+  }
+
+  if (action === "createAppointmentFromDateOnly") {
+    return handleCreateAppointmentFromDateOnly(payload, env);
+  }
+
   const mapped = mapDashboardAction(action, payload, env);
 
   if (!mapped) {
@@ -121,13 +133,38 @@ function mapDashboardAction(action, payload, env) {
   }
 }
 
+async function handleMoveAppointmentToDateOnly(payload, env) {
+  if (payload.appointmentId) {
+    await haloRequest(env, `/api/Appointment/${encodeURIComponent(payload.appointmentId)}?ignoreexchangedelete=true`, {
+      method: "DELETE"
+    });
+  }
+
+  return haloRequest(env, "/api/Tickets", {
+    method: "POST",
+    body: [ticketAssignmentPayload(payload, env)]
+  });
+}
+
+async function handleCreateAppointmentFromDateOnly(payload, env) {
+  await haloRequest(env, "/api/Tickets", {
+    method: "POST",
+    body: [ticketAssignmentPayload({ ...payload, dateFieldValue: "" }, env)]
+  });
+
+  return haloRequest(env, "/api/Appointment", {
+    method: "POST",
+    body: [appointmentPayload(payload, env, { allDay: Boolean(payload.allday) })]
+  });
+}
+
 async function handleAppointmentLoad(payload, env) {
   const date = payload.date;
   if (!date) {
     throw new Error("Appointment load requires a date.");
   }
 
-  const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "4,14,17,23,25,31,39");
+  const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "");
   const agentIds = (payload.technicianIds?.length ? payload.technicianIds : configuredTechnicianIds).map(String);
   const params = new URLSearchParams({
     start_date: `${date}T00:00:00`,
@@ -175,6 +212,75 @@ async function handleAppointmentLoad(payload, env) {
       normalizedCount: appointments.length
     }
   };
+}
+
+async function handleDateOnlyTaskLoad(payload, env) {
+  const date = payload.date;
+  const dateFieldId = env.HALO_DISPATCH_DATE_FIELD_ID;
+  const agentIds = (payload.technicianIds || []).map(String).filter(Boolean);
+  if (!date || !dateFieldId || !agentIds.length) {
+    return { ok: true, data: { tasks: [] }, meta: { rawCount: 0, normalizedCount: 0 } };
+  }
+
+  const params = new URLSearchParams({
+    include_custom_fields: String(dateFieldId),
+    agent: agentIds.join(","),
+    includecompleted: "true",
+    count: "500"
+  });
+  const haloPath = `/api/Tickets?${params.toString()}`;
+  console.log("loadDateOnlyTasks request", JSON.stringify({ date, agentIds, haloPath }));
+  const response = await haloRequest(env, haloPath, { method: "GET" });
+  const rawTickets = unwrapList(response.data);
+  const tasks = rawTickets
+    .map(ticket => normalizeDateOnlyTicket(ticket, date, dateFieldId))
+    .filter(Boolean)
+    .filter(task => agentIds.includes(String(task.techId)));
+
+  return {
+    ok: true,
+    data: { tasks },
+    meta: {
+      haloPath,
+      rawCount: rawTickets.length,
+      normalizedCount: tasks.length
+    }
+  };
+}
+
+function normalizeDateOnlyTicket(ticket, date, dateFieldId) {
+  const ticketId = ticket.id ?? ticket.faultid ?? ticket.fault_id;
+  const techId = ticket.agent_id ?? ticket.agentid ?? ticket.assigned_agent_id;
+  const customDate = customFieldValue(ticket, dateFieldId);
+  if (!ticketId || !techId || String(customDate || "").slice(0, 10) !== date) return null;
+
+  return {
+    ticketId: Number(ticketId),
+    haloTicketId: Number(ticketId),
+    techId: String(techId),
+    kind: "noTime",
+    date,
+    label: stripHtml(ticket.summary || ticket.subject || ticket.title || `Ticket #${ticketId}`),
+    completed: isCompletedTicket(ticket),
+    source: "haloDateOnly"
+  };
+}
+
+function customFieldValue(ticket, fieldId) {
+  const fields = Array.isArray(ticket.customfields) ? ticket.customfields : [];
+  const match = fields.find(field => String(field.id ?? field.customfield_id ?? field.name) === String(fieldId) || field.name === "CFTaskWithoutTimeDate");
+  return match?.value ?? match?.display ?? match?.text ?? "";
+}
+
+function isCompletedTicket(ticket) {
+  const values = [
+    ticket.status,
+    ticket.status_name,
+    ticket.workflow_name,
+    ticket.date_closed,
+    ticket.closed_at
+  ].map(value => String(value || "").toLowerCase());
+  return values.some(value => value.includes("complete") || value.includes("closed") || value === "done");
 }
 
 function normalizeAppointment(appointment, date, allowedAgentIds, env) {
@@ -234,8 +340,8 @@ function appointmentAgentIds(appointment) {
 }
 
 async function handleTechnicianLoad(payload, env) {
-  const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "4,14,17,23,25,31,39");
-  const configuredTeamIds = parseListEnv(env.HALO_TEAM_IDS || "1,3,11");
+  const configuredTechnicianIds = parseListEnv("");
+  const configuredTeamIds = parseListEnv("");
   const technicianIds = new Set((payload.technicianIds?.length ? payload.technicianIds : configuredTechnicianIds).map(String));
   const teamIds = new Set((payload.teamIds?.length ? payload.teamIds : configuredTeamIds).map(String));
   const response = await haloRequest(env, "/api/Agent", { method: "GET" });
@@ -243,12 +349,12 @@ async function handleTechnicianLoad(payload, env) {
   const teamMap = new Map();
 
   const technicians = agents
-    .filter(agent => technicianIds.has(String(agent.id)))
+    .filter(agent => !technicianIds.size || technicianIds.has(String(agent.id)))
     .map(agent => {
       const memberships = Array.isArray(agent.teams) ? agent.teams : [];
       const matchingTeams = memberships.filter(team => {
         const teamId = String(team.team_id ?? team.id ?? "");
-        return teamIds.has(teamId) && isTrue(team.in_section);
+        return (!teamIds.size || teamIds.has(teamId)) && isTrue(team.in_section);
       });
       if (!matchingTeams.length) return null;
 
@@ -266,7 +372,8 @@ async function handleTechnicianLoad(payload, env) {
         id: String(agent.id),
         name: agent.name || agent.display_name || agent.email || `Technician ${agent.id}`,
         teamId: primaryTeamId,
-        team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`
+        team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`,
+        teamIds: matchingTeams.map(team => String(team.team_id ?? team.id ?? "")).filter(Boolean)
       };
     })
     .filter(Boolean);
@@ -353,7 +460,7 @@ function ticketAssignmentPayload(payload, env) {
       {
         id: Number(dateFieldId),
         name: env.HALO_DISPATCH_DATE_FIELD_NAME || "CFTaskWithoutTimeDate",
-        value: payload.dateFieldValue || payload.date
+        value: payload.dateFieldValue ?? payload.date
       }
     ]
   };

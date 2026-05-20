@@ -1,30 +1,16 @@
 const technicians = [
-      { id: "4", name: "Technician 4", teamId: "1", team: "Team 1" },
-      { id: "14", name: "Technician 14", teamId: "1", team: "Team 1" },
-      { id: "17", name: "Technician 17", teamId: "1", team: "Team 1" },
-      { id: "23", name: "Technician 23", teamId: "3", team: "Team 3" },
-      { id: "25", name: "Technician 25", teamId: "3", team: "Team 3" },
-      { id: "31", name: "Technician 31", teamId: "11", team: "Team 11" },
-      { id: "39", name: "Technician 39", teamId: "11", team: "Team 11" }
     ];
 
     const teams = [
-      { id: "all", name: "All Teams" },
-      { id: "1", name: "Team 1" },
-      { id: "3", name: "Team 3" },
-      { id: "11", name: "Team 11" }
     ];
-
-    const haloTechnicianIds = ["4", "14", "17", "23", "25", "31", "39"];
-    const haloTeamIds = ["1", "3", "11"];
 
     const reports = [];
 
     const tickets = [];
 
     const state = {
-      selectedTechs: ["4", "14", "17"],
-      team: "1",
+      selectedTeams: [],
+      selectedTechs: [],
       orientation: "horizontal",
       reportLists: [],
       visibleFields: ["client", "sla", "estimate"],
@@ -93,7 +79,6 @@ const technicians = [
         renderAll();
         loadHaloAppointments();
       });
-      $("teamSelect").addEventListener("change", selectTeam);
       $("show24HoursCheck").addEventListener("change", () => {
         state.show24Hours = $("show24HoursCheck").checked;
         state.workingHours = state.show24Hours ? [0, 24] : [7, 17];
@@ -170,6 +155,8 @@ const technicians = [
         if (saved.appointmentRefreshMinutes !== undefined) {
           state.appointmentRefreshMinutes = Number(saved.appointmentRefreshMinutes);
         }
+        if (Array.isArray(saved.selectedTeams)) state.selectedTeams = saved.selectedTeams.map(String);
+        if (Array.isArray(saved.selectedTechs)) state.selectedTechs = saved.selectedTechs.map(String);
         $("appointmentRefreshSelect").value = String(state.appointmentRefreshMinutes);
         if (saved.apiBaseUrl) state.apiBaseUrl = saved.apiBaseUrl;
         $("apiBaseUrl").value = state.apiBaseUrl;
@@ -193,7 +180,9 @@ const technicians = [
         sectionSizes: state.sectionSizes,
         apiBaseUrl: state.apiBaseUrl,
         apiProxyUrl: state.apiProxyUrl,
-        appointmentRefreshMinutes: state.appointmentRefreshMinutes
+        appointmentRefreshMinutes: state.appointmentRefreshMinutes,
+        selectedTeams: state.selectedTeams,
+        selectedTechs: state.selectedTechs
       }));
     }
 
@@ -202,28 +191,68 @@ const technicians = [
     }
 
     function renderTeamSelect() {
-      $("teamSelect").innerHTML = teams.map(team => `<option value="${team.id}">${team.name}</option>`).join("");
-      $("teamSelect").value = teams.some(team => team.id === state.team) ? state.team : "all";
-      state.team = $("teamSelect").value;
+      const picker = $("settingsTeamPicker");
+      picker.innerHTML = teams.map(team => `
+        <label class="agent-option">
+          <input type="checkbox" value="${team.id}" ${state.selectedTeams.includes(team.id) ? "checked" : ""}>
+          <span>${escapeHtml(team.name)}</span>
+        </label>
+      `).join("") || `<div class="empty">Load Halo agents to show teams.</div>`;
+      $("settingsTeamSummary").textContent = summaryText(state.selectedTeams.length, teams.length, "team", "teams");
+      picker.querySelectorAll("input").forEach(input => {
+        input.addEventListener("change", selectTeams);
+      });
     }
 
     function renderTechPicker() {
-      const picker = $("techPicker");
-      picker.innerHTML = technicians.map(tech => `
-        <label class="chip">
-          <input type="checkbox" value="${tech.id}" ${state.selectedTechs.includes(tech.id) ? "checked" : ""}>
-          ${escapeHtml(tech.name)}
+      const picker = $("settingsAgentPicker");
+      const filtered = filteredTechnicians();
+      const filteredIds = filtered.map(tech => tech.id);
+      const allSelected = filteredIds.length > 0 && filteredIds.every(id => state.selectedTechs.includes(id));
+      $("settingsAgentSummary").textContent = summaryText(state.selectedTechs.filter(id => filteredIds.includes(id)).length, filteredIds.length, "agent", "agents");
+      picker.innerHTML = `
+        <label class="agent-option select-all">
+          <input type="checkbox" value="__all" ${allSelected ? "checked" : ""}>
+          Select All
         </label>
-      `).join("");
+        ${filtered.map(tech => `
+          <label class="agent-option">
+            <input type="checkbox" value="${tech.id}" ${state.selectedTechs.includes(tech.id) ? "checked" : ""}>
+            <span>${escapeHtml(tech.name)}</span>
+          </label>
+        `).join("") || `<div class="empty">Select a team to show matching agents.</div>`}
+      `;
       picker.querySelectorAll("input").forEach(input => {
         input.addEventListener("change", () => {
-          const selected = Array.from(picker.querySelectorAll("input:checked")).map(item => item.value);
-          state.selectedTechs = selected.length ? selected : [input.value];
+          if (input.value === "__all") {
+            state.selectedTechs = input.checked ? filteredIds : [];
+          } else {
+            state.selectedTechs = Array.from(picker.querySelectorAll("input:checked"))
+              .map(item => item.value)
+              .filter(value => value !== "__all");
+          }
+          saveLocalSettings();
           renderTechPicker();
           renderBoard();
           loadHaloAppointments();
         });
       });
+    }
+
+    function filteredTechnicians() {
+      if (!state.selectedTeams.length) return [...technicians];
+      const selectedTeams = new Set(state.selectedTeams.map(String));
+      return technicians.filter(tech => {
+        const teamIds = Array.isArray(tech.teamIds) && tech.teamIds.length ? tech.teamIds : [tech.teamId];
+        return teamIds.some(teamId => selectedTeams.has(String(teamId)));
+      });
+    }
+
+    function summaryText(selectedCount, totalCount, singular, plural) {
+      if (!totalCount) return `No ${plural}`;
+      if (selectedCount === totalCount) return `All ${plural}`;
+      if (!selectedCount) return `No ${plural} selected`;
+      return `${selectedCount} ${selectedCount === 1 ? singular : plural} selected`;
     }
 
     function renderFieldChecks() {
@@ -343,7 +372,7 @@ const technicians = [
         return `
           <section class="tech-column" data-tech-id="${tech.id}">
             <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
-              <div class="tech-name">TECH: ${escapeHtml(tech.name)}</div>
+              <div class="tech-name">${escapeHtml(tech.name)}</div>
               <div class="tech-load">${load} assigned</div>
             </header>
             <div class="vertical-task-stack">
@@ -360,7 +389,7 @@ const technicians = [
       return `
         <section class="tech-column" data-tech-id="${tech.id}">
           <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
-            <div class="tech-name">TECH: ${escapeHtml(tech.name)}</div>
+            <div class="tech-name">${escapeHtml(tech.name)}</div>
             <div class="tech-load">${load} assigned</div>
           </header>
           ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
@@ -673,6 +702,11 @@ const technicians = [
       const tech = technicians.find(item => item.id === techId);
       if (kind === "timed") {
         if (source === "scheduled") {
+          const scheduledItem = state.boardItems.find(entry => entry.ticketId === ticketId);
+          if (scheduledItem?.kind === "noTime") {
+            moveNoTimeToAppointment(ticketId, techId, time, "timed");
+            return;
+          }
           moveScheduledItem(ticketId, techId, time);
           return;
         }
@@ -685,6 +719,14 @@ const technicians = [
         const scheduledItem = state.boardItems.find(entry => entry.ticketId === ticketId);
         if (kind === "noTime" && !scheduledItem?.haloTicketId) {
           toast("Ticket required", "Calendar appointments without a ticket cannot be moved to the no-time section.");
+          return;
+        }
+        if (kind === "noTime") {
+          moveScheduledToNoTime(ticketId, techId);
+          return;
+        }
+        if (scheduledItem?.kind === "noTime") {
+          moveNoTimeToAppointment(ticketId, techId, null, kind);
           return;
         }
         moveScheduledItem(ticketId, techId, null, kind);
@@ -706,6 +748,85 @@ const technicians = [
         toast(source === "scheduled" ? "Task moved" : "Date-only task queued", `#${ticketId} assigned to ${tech.name} for ${$("boardDate").value}.`);
       }
       renderAll();
+    }
+
+    async function moveScheduledToNoTime(ticketId, techId) {
+      const item = state.boardItems.find(entry => entry.ticketId === ticketId);
+      const ticket = tickets.find(entry => entry.id === ticketId);
+      const tech = technicians.find(entry => entry.id === techId);
+      if (!item || !ticket || !tech) return;
+      const haloTicketId = item.haloTicketId || ticket.haloTicketId;
+      if (!haloTicketId) {
+        toast("Ticket required", "Calendar appointments without a ticket cannot be moved to the no-time section.");
+        return;
+      }
+
+      removeBoardItem(ticketId);
+      ticket.assignedTo = techId;
+      ticket.dateField = selectedDate();
+      state.boardItems.push({
+        ticketId,
+        haloTicketId,
+        appointmentId: null,
+        techId,
+        kind: "noTime",
+        label: item.label || ticket.title,
+        date: selectedDate(),
+        source: "haloDateOnly"
+      });
+      renderAll();
+
+      const action = item.appointmentId ? "moveAppointmentToDateOnly" : "assignTicketDateOnly";
+      const result = await callHalo(action, {
+        appointmentId: item.appointmentId || null,
+        ticketId: haloTicketId,
+        technicianId: techId,
+        dateFieldValue: selectedDate()
+      });
+      toast("Date-only task updated", `#${haloTicketId} assigned to ${tech.name} for ${selectedDate()}.`);
+      if (result?.ok) {
+        setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
+      }
+    }
+
+    async function moveNoTimeToAppointment(ticketId, techId, time, targetKind) {
+      const item = state.boardItems.find(entry => entry.ticketId === ticketId);
+      const ticket = tickets.find(entry => entry.id === ticketId);
+      const tech = technicians.find(entry => entry.id === techId);
+      if (!item || !ticket || !tech) return;
+      const haloTicketId = item.haloTicketId || ticket.haloTicketId || ticket.id;
+      const duration = targetKind === "timed" ? 30 : 1440;
+      removeBoardItem(ticketId);
+      ticket.assignedTo = techId;
+      ticket.dateField = "";
+      state.boardItems.push({
+        ticketId,
+        haloTicketId,
+        techId,
+        kind: targetKind,
+        time: targetKind === "timed" ? time : undefined,
+        duration,
+        label: item.label || ticket.title,
+        date: selectedDate(),
+        source: "haloAppointment"
+      });
+      renderAll();
+
+      const result = await callHalo("createAppointmentFromDateOnly", {
+        ticketId: haloTicketId,
+        technicianId: techId,
+        date: selectedDate(),
+        startTime: time,
+        durationMinutes: targetKind === "timed" ? duration : 30,
+        allday: targetKind === "allDay",
+        dateFieldValue: "",
+        assignTicket: true
+      });
+      const targetLabel = targetKind === "allDay" ? "all-day" : formatTime(time);
+      toast("Appointment created", `#${haloTicketId} moved to ${targetLabel} for ${tech.name}.`);
+      if (result?.ok) {
+        setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
+      }
     }
 
     async function moveScheduledItem(ticketId, techId, time, targetKind = "timed") {
@@ -894,13 +1015,15 @@ const technicians = [
       renderReportLists();
     }
 
-    function selectTeam() {
-      state.team = $("teamSelect").value;
-      if (state.team === "all") {
-        state.selectedTechs = technicians.map(tech => tech.id);
-      } else {
-        state.selectedTechs = technicians.filter(tech => tech.teamId === state.team).map(tech => tech.id);
+    function selectTeams() {
+      state.selectedTeams = Array.from($("settingsTeamPicker").querySelectorAll("input:checked")).map(input => input.value);
+      const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
+      state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
+      if (!state.selectedTechs.length) {
+        state.selectedTechs = Array.from(filteredIds);
       }
+      saveLocalSettings();
+      renderTeamSelect();
       renderTechPicker();
       renderBoard();
       loadHaloAppointments();
@@ -935,23 +1058,20 @@ const technicians = [
       if (!state.apiProxyUrl) return;
       const workerReady = await testWorkerConnection({ quiet: true });
       if (!workerReady) return;
-      const result = await callHalo("loadTechnicians", {
-        technicianIds: haloTechnicianIds,
-        teamIds: haloTeamIds
-      }, { quiet: true });
+      const result = await callHalo("loadTechnicians", {}, { quiet: true });
       let data = result?.data;
       if (!data?.technicians?.length) {
         data = await loadHaloTechniciansFromAgentEndpoint();
       }
       if (!data?.technicians?.length) {
-        toast("Halo names not loaded", "No agents matched the configured tech IDs, team IDs, and in_section rule.");
+        toast("Halo names not loaded", "No agents matched the selected teams and in_section rule.");
         return;
       }
       syncHaloTechnicians(data);
       renderTeamSelect();
       renderTechPicker();
       renderBoard();
-      toast("Halo names loaded", `${data.technicians.length} technicians matched the configured teams.`);
+      toast("Halo names loaded", `${data.technicians.length} agents are available for dispatch.`);
       loadHaloAppointments();
     }
 
@@ -964,6 +1084,7 @@ const technicians = [
       console.log("HaloPSA appointment load result", result?.meta || result);
       if (!result?.ok) return;
       syncHaloAppointments(result.data?.appointments || []);
+      loadHaloDateOnlyTasks({ quiet: true });
       renderBoard();
       console.log("HaloPSA board appointment sync", appointmentVisibilitySummary(result.data?.appointments || []));
       if (!options.quiet && result.data?.appointments?.length) {
@@ -983,6 +1104,21 @@ const technicians = [
       }, state.appointmentRefreshMinutes * 60000);
     }
 
+    async function loadHaloDateOnlyTasks(options = {}) {
+      if (!state.apiProxyUrl || !state.selectedTechs.length) return;
+      const result = await callHalo("loadDateOnlyTasks", {
+        date: selectedDate(),
+        technicianIds: state.selectedTechs
+      }, { quiet: true });
+      console.log("HaloPSA date-only task load result", result?.meta || result);
+      if (!result?.ok) return;
+      syncHaloDateOnlyTasks(result.data?.tasks || []);
+      renderBoard();
+      if (!options.quiet && result.data?.tasks?.length) {
+        toast("Date-only tasks loaded", `${result.data.tasks.length} without-time tickets matched this view.`);
+      }
+    }
+
     function syncHaloAppointments(appointments) {
       const visibleTechs = new Set(state.selectedTechs);
       state.boardItems = state.boardItems.filter(item => {
@@ -994,6 +1130,20 @@ const technicians = [
       appointments.forEach(appointment => {
         hydrateTicketFromAppointment(appointment);
         state.boardItems.push(appointment);
+      });
+    }
+
+    function syncHaloDateOnlyTasks(tasks) {
+      const visibleTechs = new Set(state.selectedTechs);
+      state.boardItems = state.boardItems.filter(item => {
+        const sameDate = isSelectedDate(item.date);
+        const sameTech = visibleTechs.has(String(item.techId));
+        return item.source !== "haloDateOnly" || !sameDate || !sameTech;
+      });
+
+      tasks.forEach(task => {
+        hydrateTicketFromDateOnlyTask(task);
+        state.boardItems.push(task);
       });
     }
 
@@ -1030,6 +1180,34 @@ const technicians = [
       });
     }
 
+    function hydrateTicketFromDateOnlyTask(task) {
+      const existing = tickets.find(ticket => ticket.id === task.ticketId);
+      if (existing) {
+        existing.dateField = task.date;
+        existing.assignedTo = task.techId;
+        existing.haloTicketId = task.haloTicketId || existing.haloTicketId;
+        existing.completed = task.completed;
+        return;
+      }
+      tickets.push({
+        id: task.ticketId,
+        client: "",
+        title: task.label || "Date-only ticket",
+        priority: "",
+        type: "Date-only",
+        report: "",
+        site: "",
+        sla: "",
+        estimate: "",
+        contact: "",
+        details: task.label || "",
+        dateField: task.date,
+        assignedTo: task.techId,
+        haloTicketId: task.haloTicketId || task.ticketId,
+        completed: task.completed
+      });
+    }
+
     async function loadHaloTechniciansFromAgentEndpoint() {
       try {
         const result = await fetchWorkerJson("/api/halo/Agent");
@@ -1043,17 +1221,13 @@ const technicians = [
 
     function normalizeHaloAgents(data) {
       const agents = unwrapList(data);
-      const allowedTechs = new Set(haloTechnicianIds);
-      const allowedTeams = new Set(haloTeamIds);
       const teamMap = new Map();
 
       const matchedTechnicians = agents
-        .filter(agent => allowedTechs.has(String(agent.id)))
         .map(agent => {
           const memberships = Array.isArray(agent.teams) ? agent.teams : [];
           const matchingTeams = memberships.filter(team => {
-            const teamId = String(team.team_id ?? team.id ?? "");
-            return allowedTeams.has(teamId) && isTrue(team.in_section);
+            return String(team.team_id ?? team.id ?? "") && isTrue(team.in_section);
           });
           if (!matchingTeams.length) return null;
 
@@ -1071,7 +1245,8 @@ const technicians = [
             id: String(agent.id),
             name: agent.name || agent.display_name || agent.email || `Technician ${agent.id}`,
             teamId: primaryTeamId,
-            team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`
+            team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`,
+            teamIds: matchingTeams.map(team => String(team.team_id ?? team.id ?? "")).filter(Boolean)
           };
         })
         .filter(Boolean);
@@ -1087,22 +1262,27 @@ const technicians = [
         id: String(tech.id),
         name: tech.name || `Technician ${tech.id}`,
         teamId: String(tech.teamId || ""),
-        team: tech.team || `Team ${tech.teamId || ""}`
+        team: tech.team || `Team ${tech.teamId || ""}`,
+        teamIds: Array.isArray(tech.teamIds) && tech.teamIds.length ? tech.teamIds.map(String) : [String(tech.teamId || "")]
       })));
 
-      teams.splice(0, teams.length, { id: "all", name: "All Teams" }, ...data.teams.map(team => ({
+      teams.splice(0, teams.length, ...data.teams.map(team => ({
         id: String(team.id),
         name: team.name || `Team ${team.id}`
       })));
 
-      const availableTechIds = new Set(technicians.map(tech => tech.id));
-      state.selectedTechs = state.selectedTechs.filter(id => availableTechIds.has(id));
-      if (!state.selectedTechs.length) {
-        state.selectedTechs = technicians.filter(tech => tech.teamId === state.team).map(tech => tech.id);
+      const availableTeamIds = new Set(teams.map(team => team.id));
+      state.selectedTeams = state.selectedTeams.filter(id => availableTeamIds.has(id));
+      if (!state.selectedTeams.length) {
+        state.selectedTeams = teams.map(team => team.id);
       }
+
+      const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
+      state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
       if (!state.selectedTechs.length) {
-        state.selectedTechs = technicians.map(tech => tech.id);
+        state.selectedTechs = Array.from(filteredIds);
       }
+      saveLocalSettings();
     }
 
     function unwrapList(data) {

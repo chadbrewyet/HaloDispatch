@@ -42,14 +42,6 @@
 
       <section class="main-panel">
         <div class="filters">
-          <div class="field">
-            <label>Technicians</label>
-            <div class="tech-picker" id="techPicker"></div>
-          </div>
-          <div class="field">
-            <label>Team</label>
-            <select id="teamSelect"></select>
-          </div>
           <label class="toggle-field">
             <input id="show24HoursCheck" type="checkbox">
             <span>Show 24 hours</span>
@@ -111,6 +103,23 @@
             <option value="light">Light</option>
             <option value="dark">Dark</option>
           </select>
+        </div>
+      </section>
+      <section class="settings-card">
+        <h3>Teams & Agents</h3>
+        <div class="field">
+          <label>Teams</label>
+          <details class="multi-dropdown">
+            <summary id="settingsTeamSummary">Select Teams</summary>
+            <div class="agent-picker" id="settingsTeamPicker"></div>
+          </details>
+        </div>
+        <div class="field">
+          <label>Agents</label>
+          <details class="multi-dropdown">
+            <summary id="settingsAgentSummary">Select Agents</summary>
+            <div class="agent-picker" id="settingsAgentPicker"></div>
+          </details>
         </div>
       </section>
       <section class="settings-card">

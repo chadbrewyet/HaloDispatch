@@ -30,9 +30,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
 
 4. Update the Worker variables in `wrangler.toml`:
 
-   - `HALO_TECHNICIAN_IDS` lists the Halo agents visible on the dispatch board.
-   - `TECHNICIAN_MAP_JSON` maps dashboard technician IDs to Halo agent IDs.
-   - `HALO_TEAM_IDS` lists the Halo teams available for team selection.
+   - `TECHNICIAN_MAP_JSON` is optional; numeric dashboard agent IDs are sent directly to Halo.
    - `HALO_DISPATCH_DATE_FIELD_ID` is the custom ticket date field used by the without-time section.
    - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
    - `HALO_DISPLAY_TIME_ZONE` controls how Halo calendar times are shown on the dispatch board.
@@ -69,26 +67,26 @@ The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
 
 - report refresh: `GET /api/ReportData/{publishedid}`
 - calendar appointment load: `GET /api/Appointment`
+- without-time task load: `GET /api/Tickets`
 - timed appointment creation: `POST /api/Appointment`
 - all-day task creation: `POST /api/Appointment`
 - without-time assignment: `POST /api/Tickets`
+- scheduled-to-without-time moves: `DELETE /api/Appointment/{id}` then `POST /api/Tickets`
 
-Moving an already scheduled appointment to a new time or technician is ready in the UI, but the Worker intentionally returns `local-only` until the dashboard is loading and storing real Halo `appointment_id` values. That avoids creating duplicate appointments while testing.
+Moving an already scheduled appointment to a new time, technician, all-day section, or without-time section uses the loaded Halo `appointment_id` and updates Halo directly.
 
 Appointment refresh can be configured in Settings. The default is every 5 minutes, with a manual-only option available.
 
 Current Halo configuration:
 
-- technician IDs: `4`, `14`, `17`, `23`, `25`, `31`, `39`
-- team IDs: `1`, `3`, `11`
+- agent/team selection is loaded from `GET /api/Agent`
 - without-time task date field: `CFTaskWithoutTimeDate` / `486`
 - ticket URL prefix: `https://gagepsa.halopsa.com/ticket?id=`
 
-Technician and team display names are loaded from `GET /api/Agent`. A technician is included only when the agent ID is configured and the agent has a `teams` array entry where `team_id` is one of the configured team IDs and `in_section` is `true`.
+Technician and team display names are loaded from `GET /api/Agent`. A technician is included when the agent has a `teams` array entry where `in_section` is `true`; the Settings drawer filters agents by selected team memberships.
 
 ## Still Needed From HaloPSA
 
 To finish the live integration, we still need:
 
 - published report IDs for the ticket lists
-- live appointment loading so scheduled cards include `appointment_id` for persisted rescheduling
