@@ -35,6 +35,8 @@ const technicians = [
       sectionSizes: {},
       apiBaseUrl: "https://gagepsa.halopsa.com/ticket?id=",
       apiProxyUrl: "",
+      appointmentRefreshMinutes: 5,
+      appointmentRefreshTimer: null,
       pendingAppointment: null,
       activeTicketId: null,
       boardItems: []
@@ -71,6 +73,7 @@ const technicians = [
       observeResizableSections();
       wireSectionResizers();
       bindEvents();
+      resetAppointmentRefreshTimer();
       toast("Ready", "Dispatch board loaded. HaloPSA actions run in mock mode until a Worker API URL is saved.");
       loadHaloTechnicians();
     }
@@ -114,6 +117,11 @@ const technicians = [
       $("closeSettingsBtn").addEventListener("click", () => $("configDrawer").classList.remove("open"));
       $("saveApiBtn").addEventListener("click", saveApiSettings);
       $("testWorkerBtn").addEventListener("click", testWorkerConnection);
+      $("appointmentRefreshSelect").addEventListener("change", () => {
+        state.appointmentRefreshMinutes = Number($("appointmentRefreshSelect").value);
+        saveLocalSettings();
+        resetAppointmentRefreshTimer();
+      });
       $("refreshBtn").addEventListener("click", refreshReports);
       $("poolSearch").addEventListener("input", renderPool);
       $("poolPriority").addEventListener("change", renderPool);
@@ -150,6 +158,10 @@ const technicians = [
         }
         if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
+        if (saved.appointmentRefreshMinutes !== undefined) {
+          state.appointmentRefreshMinutes = Number(saved.appointmentRefreshMinutes);
+        }
+        $("appointmentRefreshSelect").value = String(state.appointmentRefreshMinutes);
         if (saved.apiBaseUrl) state.apiBaseUrl = saved.apiBaseUrl;
         $("apiBaseUrl").value = state.apiBaseUrl;
         if (saved.apiProxyUrl) {
@@ -170,7 +182,8 @@ const technicians = [
         listViews: state.listViews,
         sectionSizes: state.sectionSizes,
         apiBaseUrl: state.apiBaseUrl,
-        apiProxyUrl: state.apiProxyUrl
+        apiProxyUrl: state.apiProxyUrl,
+        appointmentRefreshMinutes: state.appointmentRefreshMinutes
       }));
     }
 
@@ -379,7 +392,7 @@ const technicians = [
       for (let hour = state.workingHours[0]; hour < state.workingHours[1]; hour++) {
         for (const minute of [0, 30]) {
           const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-          const slotItems = timed.filter(item => item.time === time);
+          const slotItems = timed.filter(item => slotForTime(item.time) === time);
           slots.push(`
             <div class="time-slot" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
               ${slotItems.map(renderAppointment).join("")}
@@ -856,6 +869,7 @@ const technicians = [
       state.apiProxyUrl = $("apiProxyUrl").value.trim();
       $("apiState").textContent = state.apiProxyUrl ? "HaloPSA Worker connected" : "HaloPSA mock mode";
       saveLocalSettings();
+      resetAppointmentRefreshTimer();
       toast("Connection settings saved", state.apiProxyUrl || "Mock mode remains active until the Worker URL is added.");
       loadHaloTechnicians();
     }
@@ -884,7 +898,7 @@ const technicians = [
       loadHaloAppointments();
     }
 
-    async function loadHaloAppointments() {
+    async function loadHaloAppointments(options = {}) {
       if (!state.apiProxyUrl || !state.selectedTechs.length) return;
       const result = await callHalo("loadAppointments", {
         date: selectedDate(),
@@ -893,9 +907,21 @@ const technicians = [
       if (!result?.ok) return;
       syncHaloAppointments(result.data?.appointments || []);
       renderBoard();
-      if (result.data?.appointments?.length) {
+      if (!options.quiet && result.data?.appointments?.length) {
         toast("Halo appointments loaded", `${result.data.appointments.length} calendar items matched this view.`);
       }
+    }
+
+    function resetAppointmentRefreshTimer() {
+      if (state.appointmentRefreshTimer) {
+        clearInterval(state.appointmentRefreshTimer);
+        state.appointmentRefreshTimer = null;
+      }
+      if (!state.appointmentRefreshMinutes || state.appointmentRefreshMinutes < 1) return;
+
+      state.appointmentRefreshTimer = setInterval(() => {
+        loadHaloAppointments({ quiet: true });
+      }, state.appointmentRefreshMinutes * 60000);
     }
 
     function syncHaloAppointments(appointments) {
@@ -1117,6 +1143,12 @@ const technicians = [
     function shouldShowTicketCard(ticket) {
       if (ticket.dateField && ticket.dateField !== selectedDate()) return false;
       return !isTicketScheduled(ticket.id);
+    }
+
+    function slotForTime(time) {
+      const [hour, minute] = String(time || "00:00").split(":").map(Number);
+      const slotMinute = minute >= 30 ? 30 : 0;
+      return `${String(hour || 0).padStart(2, "0")}:${String(slotMinute).padStart(2, "0")}`;
     }
 
     function selectedDate() {

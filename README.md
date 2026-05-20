@@ -67,11 +67,14 @@ The API token should have permission to edit Workers for the Cloudflare account 
 The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
 
 - report refresh: `GET /api/ReportData/{publishedid}`
+- calendar appointment load: `GET /api/Appointment`
 - timed appointment creation: `POST /api/Appointment`
 - all-day task creation: `POST /api/Appointment`
 - without-time assignment: `POST /api/Tickets`
 
 Moving an already scheduled appointment to a new time or technician is ready in the UI, but the Worker intentionally returns `local-only` until the dashboard is loading and storing real Halo `appointment_id` values. That avoids creating duplicate appointments while testing.
+
+Appointment refresh can be configured in Settings. The default is every 5 minutes, with a manual-only option available.
 
 Current Halo configuration:
 

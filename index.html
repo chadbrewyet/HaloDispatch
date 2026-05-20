@@ -137,6 +137,17 @@
           <label>Report ID Source</label>
           <input id="reportHint" placeholder="Paste report IDs when ready">
         </div>
+        <div class="field">
+          <label>Appointment Refresh</label>
+          <select id="appointmentRefreshSelect">
+            <option value="0">Manual only</option>
+            <option value="1">Every 1 minute</option>
+            <option value="2">Every 2 minutes</option>
+            <option value="5" selected>Every 5 minutes</option>
+            <option value="10">Every 10 minutes</option>
+            <option value="15">Every 15 minutes</option>
+          </select>
+        </div>
         <button id="saveApiBtn" class="primary">Save Connection Draft</button>
         <button id="testWorkerBtn" type="button">Test Worker Connection</button>
       </section>

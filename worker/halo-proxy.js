@@ -328,8 +328,8 @@ function addMinutes(time, minutes) {
 }
 
 function durationMinutes(startDate, endDate) {
-  const start = Date.parse(startDate);
-  const end = Date.parse(endDate);
+  const start = Date.parse(normalizeDateTime(startDate));
+  const end = Date.parse(normalizeDateTime(endDate));
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) {
     return 30;
   }
@@ -341,8 +341,12 @@ function datePart(value) {
 }
 
 function timePart(value) {
-  const match = String(value || "").match(/T(\d{2}:\d{2})/);
+  const match = String(value || "").match(/[T\s](\d{1,2}:\d{2})/);
   return match ? match[1] : "";
+}
+
+function normalizeDateTime(value) {
+  return String(value || "").replace(" ", "T");
 }
 
 function stripHtml(value) {
