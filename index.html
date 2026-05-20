@@ -50,15 +50,10 @@
             <label>Team</label>
             <select id="teamSelect"></select>
           </div>
-          <div class="field">
-            <label>Working Hours</label>
-            <select id="hoursSelect">
-              <option value="7,17">7:00 AM - 5:00 PM</option>
-              <option value="8,17" selected>8:00 AM - 5:00 PM</option>
-              <option value="8,18">8:00 AM - 6:00 PM</option>
-              <option value="9,18">9:00 AM - 6:00 PM</option>
-            </select>
-          </div>
+          <label class="toggle-field">
+            <input id="show24HoursCheck" type="checkbox">
+            <span>Show 24 hours</span>
+          </label>
           <div class="field">
             <label>Card Colors</label>
             <select id="colorBySelect">

@@ -28,7 +28,8 @@ const technicians = [
       orientation: "horizontal",
       reportLists: [],
       visibleFields: ["client", "sla", "estimate"],
-      workingHours: [8, 17],
+      workingHours: [7, 17],
+      show24Hours: false,
       colorBy: "priority",
       theme: "light",
       listViews: { pool: "card" },
@@ -93,8 +94,10 @@ const technicians = [
         loadHaloAppointments();
       });
       $("teamSelect").addEventListener("change", selectTeam);
-      $("hoursSelect").addEventListener("change", () => {
-        state.workingHours = $("hoursSelect").value.split(",").map(Number);
+      $("show24HoursCheck").addEventListener("change", () => {
+        state.show24Hours = $("show24HoursCheck").checked;
+        state.workingHours = state.show24Hours ? [0, 24] : [7, 17];
+        saveLocalSettings();
         renderBoard();
       });
       $("colorBySelect").addEventListener("change", () => {
@@ -153,6 +156,11 @@ const technicians = [
           state.colorBy = saved.colorBy;
           $("colorBySelect").value = saved.colorBy;
         }
+        if (saved.show24Hours !== undefined) {
+          state.show24Hours = Boolean(saved.show24Hours);
+          state.workingHours = state.show24Hours ? [0, 24] : [7, 17];
+          $("show24HoursCheck").checked = state.show24Hours;
+        }
         if (saved.theme) {
           state.theme = saved.theme;
           $("themeSelect").value = saved.theme;
@@ -179,6 +187,7 @@ const technicians = [
       localStorage.setItem("dispatchBoardSettings", JSON.stringify({
         visibleFields: state.visibleFields,
         colorBy: state.colorBy,
+        show24Hours: state.show24Hours,
         theme: state.theme,
         listViews: state.listViews,
         sectionSizes: state.sectionSizes,
@@ -424,7 +433,7 @@ const technicians = [
             .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
           slots.push(`
             <div class="time-slot ${slotItems.length > 1 ? "has-overlap" : ""}" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
-              ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length)).join("")}
+              ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length, state.orientation)).join("")}
             </div>
           `);
         }
@@ -434,13 +443,14 @@ const technicians = [
 
     function renderSmallEvent(item) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
-      return `<div class="small-event ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
+      return `<div class="small-event ${appointmentClass(item, ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
     }
 
-    function renderAppointment(item, index = 0, count = 1) {
+    function renderAppointment(item, index = 0, count = 1, orientation = state.orientation) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
+      const durationSlots = Math.max(1, Math.ceil((item.duration || 30) / 30));
       return `
-        <div class="appointment ${count > 1 ? "overlap-card" : ""} ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
+        <div class="appointment ${count > 1 ? "overlap-card" : ""} ${appointmentClass(item, ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};--duration-slots:${durationSlots};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
           <strong>#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Appointment")}</strong>
           <span>${escapeHtml(formatTime(item.time))} - ${item.duration || 30}m</span>
         </div>
@@ -671,6 +681,16 @@ const technicians = [
         return;
       }
 
+      if (source === "scheduled") {
+        const scheduledItem = state.boardItems.find(entry => entry.ticketId === ticketId);
+        if (kind === "noTime" && !scheduledItem?.haloTicketId) {
+          toast("Ticket required", "Calendar appointments without a ticket cannot be moved to the no-time section.");
+          return;
+        }
+        moveScheduledItem(ticketId, techId, null, kind);
+        return;
+      }
+
       removeBoardItem(ticketId);
       ticket.assignedTo = techId;
       if (kind === "allDay") {
@@ -688,17 +708,18 @@ const technicians = [
       renderAll();
     }
 
-    async function moveScheduledItem(ticketId, techId, time) {
+    async function moveScheduledItem(ticketId, techId, time, targetKind = "timed") {
       const item = state.boardItems.find(entry => entry.ticketId === ticketId);
       const ticket = tickets.find(entry => entry.id === ticketId);
       const tech = technicians.find(entry => entry.id === techId);
       if (!item || !ticket || !tech) return;
       const haloTicketId = item.haloTicketId || ticket.haloTicketId || null;
       const previous = { techId: item.techId, time: item.time, kind: item.kind };
+      const nextDuration = targetKind === "timed" && previous.kind === "allDay" ? 30 : item.duration || 30;
       item.techId = techId;
-      item.kind = "timed";
-      item.time = time;
-      item.duration = item.duration || 30;
+      item.kind = targetKind;
+      item.time = targetKind === "timed" ? time : undefined;
+      item.duration = nextDuration;
       item.date = selectedDate();
       ticket.assignedTo = techId;
       ticket.dateField = selectedDate();
@@ -708,13 +729,15 @@ const technicians = [
         technicianId: techId,
         previousStartTime: previous.time || null,
         startTime: time,
-        durationMinutes: item.duration || 30,
+        durationMinutes: nextDuration,
         appointmentId: item.appointmentId || null,
         date: $("boardDate").value,
+        allday: targetKind === "allDay",
         assignTicket: previous.techId !== techId
       });
       const techChanged = previous.techId !== techId ? ` and assigned to ${tech.name}` : "";
-      toast("Appointment updated", `#${ticketId} moved to ${formatTime(time)}${techChanged}.`);
+      const targetLabel = targetKind === "allDay" ? "all-day" : formatTime(time);
+      toast("Appointment updated", `#${ticketId} moved to ${targetLabel}${techChanged}.`);
       renderAll();
       if (result?.ok) {
         setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
@@ -1002,7 +1025,8 @@ const technicians = [
         details: appointment.label || "",
         dateField: appointment.date,
         assignedTo: appointment.techId,
-        haloTicketId: appointment.haloTicketId || null
+        haloTicketId: appointment.haloTicketId || null,
+        completed: appointment.completed
       });
     }
 
@@ -1222,9 +1246,16 @@ const technicians = [
 
     function ticketColorClass(ticket) {
       if (!ticket) return "";
+      if (ticket.completed) return "color-completed";
       if (state.colorBy === "priority") return `color-${ticket.priority.toLowerCase()}`;
       if (state.colorBy === "type") return `color-type-${ticket.type.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
       return `color-sla-${slaBucket(ticket.sla)}`;
+    }
+
+    function appointmentClass(item, ticket) {
+      if (item.completed || ticket?.completed) return "color-completed";
+      if (!item.haloTicketId) return "color-ticketless";
+      return ticketColorClass(ticket);
     }
 
     function slaBucket(sla) {

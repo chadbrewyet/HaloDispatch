@@ -396,6 +396,15 @@
 
     .field { display: grid; gap: 4px; }
 
+    .toggle-field {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      min-height: 34px;
+      font-size: 13px;
+      color: var(--ink);
+    }
+
     .tech-picker {
       display: flex;
       flex-wrap: wrap;
@@ -721,6 +730,7 @@
       display: flex;
       gap: 4px;
       align-items: stretch;
+      overflow: visible;
     }
 
     .board.vertical .time-slot {
@@ -737,6 +747,7 @@
     }
 
     .appointment {
+      position: relative;
       width: 100%;
       min-width: 0;
       flex: 1 1 100%;
@@ -751,6 +762,15 @@
       font-size: 11px;
       overflow: hidden;
       cursor: grab;
+      z-index: 2;
+    }
+
+    .board.horizontal .appointment {
+      min-height: calc((var(--duration-slots, 1) * var(--slot-height)) - 8px);
+    }
+
+    .board.vertical .appointment {
+      min-width: calc((var(--duration-slots, 1) * var(--slot-width)) - 8px);
     }
 
     .time-slot.has-overlap .appointment {
@@ -827,6 +847,20 @@
       background: #f0f6e8;
     }
 
+    .color-ticketless {
+      border-color: #2a8d9c;
+      border-left-color: #2a8d9c;
+      background: #e7f7fa;
+    }
+
+    .color-completed {
+      border-color: #9aa4aa;
+      border-left-color: #77838a;
+      background: #eef1f2;
+      color: #5b666d;
+      opacity: 0.68;
+    }
+
     body[data-theme="dark"] .ticket-card,
     body[data-theme="dark"] .small-event,
     body[data-theme="dark"] .appointment {
@@ -887,6 +921,20 @@
       border-color: #b5d486;
       border-left-color: #b5d486;
       background: linear-gradient(90deg, rgba(181, 212, 134, 0.24), rgba(181, 212, 134, 0.08)), #1b252d;
+    }
+
+    body[data-theme="dark"] .color-ticketless {
+      border-color: #7fd6df;
+      border-left-color: #7fd6df;
+      background: linear-gradient(90deg, rgba(127, 214, 223, 0.22), rgba(127, 214, 223, 0.08)), #1b252d;
+    }
+
+    body[data-theme="dark"] .color-completed {
+      border-color: #7e8a91;
+      border-left-color: #a0abb1;
+      background: #20282e;
+      color: #b0bbc1;
+      opacity: 0.72;
     }
 
     body[data-theme="dark"] .empty {

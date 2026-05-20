@@ -160,6 +160,7 @@ async function handleAppointmentLoad(payload, env) {
       start_date: appointment.start_date,
       end_date: appointment.end_date,
       allday: appointment.allday,
+      status: appointment.status || appointment.appointment_status || appointment.complete_status,
       subject: appointment.subject
     })),
     normalizedSample: appointments.slice(0, 5)
@@ -190,6 +191,7 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const duration = appointment.allday ? 1440 : durationMinutes(startDate, endDate);
   const kind = appointment.allday ? "allDay" : "timed";
   const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
+  const completed = isCompletedAppointment(appointment);
 
   return agentIds.map(agentId => ({
     appointmentId: String(appointment.id || appointment.appointment_id || ""),
@@ -201,8 +203,20 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
     duration,
     date: datePart(startDate, env) || date,
     label: stripHtml(title),
+    completed,
     source: "haloAppointment"
   }));
+}
+
+function isCompletedAppointment(appointment) {
+  const values = [
+    appointment.status,
+    appointment.appointment_status,
+    appointment.complete_status,
+    appointment.agent_status,
+    appointment.complete_date
+  ].map(value => String(value || "").toLowerCase());
+  return values.some(value => value.includes("complete") || value === "closed" || value === "done");
 }
 
 function appointmentAgentIds(appointment) {
@@ -292,12 +306,14 @@ async function handleReportRefresh(payload, env) {
 function appointmentUpdatePayload(payload, env) {
   const startTime = payload.startTime || "00:00";
   const duration = Number(payload.durationMinutes || 30);
+  const allDay = Boolean(payload.allday);
 
   const body = compactObject({
     id: Number(payload.appointmentId),
     agent_id: haloAgentId(payload.technicianId, env),
-    start_date: dispatchLocalToUtcDateTime(payload.date, startTime, env),
-    end_date: dispatchLocalToUtcDateTime(payload.date, addMinutes(startTime, duration), env),
+    start_date: allDay ? undefined : dispatchLocalToUtcDateTime(payload.date, startTime, env),
+    end_date: allDay ? undefined : dispatchLocalToUtcDateTime(payload.date, addMinutes(startTime, duration), env),
+    allday: allDay,
     _force: true
   });
   console.log("updateAppointment payload", JSON.stringify(body));
