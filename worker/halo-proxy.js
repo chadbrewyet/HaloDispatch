@@ -139,14 +139,38 @@ async function handleAppointmentLoad(payload, env) {
     page_size: "500"
   });
 
-  const response = await haloRequest(env, `/api/Appointment?${params.toString()}`, { method: "GET" });
-  const appointments = unwrapList(response.data)
+  const haloPath = `/api/Appointment?${params.toString()}`;
+  console.log("loadAppointments request", JSON.stringify({ date, agentIds, haloPath }));
+
+  const response = await haloRequest(env, haloPath, { method: "GET" });
+  const rawAppointments = unwrapList(response.data);
+  const appointments = rawAppointments
     .flatMap(appointment => normalizeAppointment(appointment, date, agentIds))
     .filter(Boolean);
+  console.log("loadAppointments response", JSON.stringify({
+    date,
+    agentIds,
+    rawCount: rawAppointments.length,
+    normalizedCount: appointments.length,
+    sample: rawAppointments.slice(0, 3).map(appointment => ({
+      id: appointment.id || appointment.appointment_id,
+      ticket_id: appointment.ticket_id,
+      agent_id: appointment.agent_id,
+      start_date: appointment.start_date,
+      end_date: appointment.end_date,
+      allday: appointment.allday,
+      subject: appointment.subject
+    }))
+  }));
 
   return {
     ok: true,
-    data: { appointments }
+    data: { appointments },
+    meta: {
+      haloPath,
+      rawCount: rawAppointments.length,
+      normalizedCount: appointments.length
+    }
   };
 }
 

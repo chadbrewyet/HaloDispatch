@@ -904,6 +904,7 @@ const technicians = [
         date: selectedDate(),
         technicianIds: state.selectedTechs
       }, { quiet: true });
+      console.log("HaloPSA appointment load result", result?.meta || result);
       if (!result?.ok) return;
       syncHaloAppointments(result.data?.appointments || []);
       renderBoard();
