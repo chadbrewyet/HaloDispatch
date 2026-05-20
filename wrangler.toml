@@ -11,6 +11,7 @@ compatibility_date = "2026-05-18"
 HALO_AUTH_URL = "https://gagepsa.halopsa.com/auth/token"
 HALO_RESOURCE_SERVER = "https://gagepsa.halopsa.com"
 HALO_SCOPE = "all"
+HALO_DISPLAY_TIME_ZONE = "America/Chicago"
 
 # Dashboard technician IDs already match these Halo agent IDs.
 HALO_TECHNICIAN_IDS = "4,14,17,23,25,31,39"

@@ -35,6 +35,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    - `HALO_TEAM_IDS` lists the Halo teams available for team selection.
    - `HALO_DISPATCH_DATE_FIELD_ID` is the custom ticket date field used by the without-time section.
    - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
+   - `HALO_DISPLAY_TIME_ZONE` controls how Halo calendar times are shown on the dispatch board.
 
 5. Store secrets:
 

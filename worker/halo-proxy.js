@@ -145,7 +145,7 @@ async function handleAppointmentLoad(payload, env) {
   const response = await haloRequest(env, haloPath, { method: "GET" });
   const rawAppointments = unwrapList(response.data);
   const appointments = rawAppointments
-    .flatMap(appointment => normalizeAppointment(appointment, date, agentIds))
+    .flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
     .filter(Boolean);
   console.log("loadAppointments response", JSON.stringify({
     date,
@@ -176,7 +176,7 @@ async function handleAppointmentLoad(payload, env) {
   };
 }
 
-function normalizeAppointment(appointment, date, allowedAgentIds) {
+function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const ticketId = appointment.ticket_id ?? appointment.faultid ?? appointment.fault_id ?? appointment.apfaultid;
   const displayId = ticketId ?? appointment.id ?? appointment.appointment_id;
   if (!displayId) return [];
@@ -186,7 +186,7 @@ function normalizeAppointment(appointment, date, allowedAgentIds) {
 
   const startDate = appointment.start_date || appointment.startdate || appointment.start_date_only;
   const endDate = appointment.end_date || appointment.enddate || appointment.end_date_only;
-  const startTime = timePart(startDate) || "00:00";
+  const startTime = timePart(startDate, env) || "00:00";
   const duration = appointment.allday ? 1440 : durationMinutes(startDate, endDate);
   const kind = appointment.allday ? "allDay" : "timed";
   const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
@@ -199,7 +199,7 @@ function normalizeAppointment(appointment, date, allowedAgentIds) {
     kind,
     time: kind === "timed" ? startTime : undefined,
     duration,
-    date: datePart(startDate) || date,
+    date: datePart(startDate, env) || date,
     label: stripHtml(title),
     source: "haloAppointment"
   }));
@@ -369,17 +369,43 @@ function durationMinutes(startDate, endDate) {
   return Math.max(15, Math.round((end - start) / 60000));
 }
 
-function datePart(value) {
-  return String(value || "").slice(0, 10);
+function datePart(value, env) {
+  const local = localDateTimeParts(value, env);
+  return local ? local.date : String(value || "").slice(0, 10);
 }
 
-function timePart(value) {
+function timePart(value, env) {
+  const local = localDateTimeParts(value, env);
+  if (local) return local.time;
   const match = String(value || "").match(/[T\s](\d{1,2}:\d{2})/);
   return match ? match[1] : "";
 }
 
+function localDateTimeParts(value, env) {
+  if (!value) return null;
+  const date = new Date(normalizeDateTime(value));
+  if (!Number.isFinite(date.getTime())) return null;
+
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: env.HALO_DISPLAY_TIME_ZONE || "America/Chicago",
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  return {
+    date: `${byType.year}-${byType.month}-${byType.day}`,
+    time: `${byType.hour}:${byType.minute}`
+  };
+}
+
 function normalizeDateTime(value) {
-  return String(value || "").replace(" ", "T");
+  const normalized = String(value || "").replace(" ", "T");
+  if (!normalized || /(?:Z|[+-]\d{2}:?\d{2})$/i.test(normalized)) return normalized;
+  return `${normalized}Z`;
 }
 
 function stripHtml(value) {
