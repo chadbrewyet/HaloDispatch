@@ -24,6 +24,8 @@ const technicians = [
       apiProxyUrl: "",
       appointmentRefreshMinutes: 5,
       appointmentRefreshTimer: null,
+      currentTimeTimer: null,
+      shouldCenterNow: true,
       calendarScroll: {},
       pendingAppointment: null,
       activeTicketId: null,
@@ -62,6 +64,7 @@ const technicians = [
       wireSectionResizers();
       bindEvents();
       resetAppointmentRefreshTimer();
+      resetCurrentTimeTimer();
       toast("Ready", "Dispatch board loaded. HaloPSA actions run in mock mode until a Worker API URL is saved.");
       loadHaloTechnicians();
     }
@@ -72,16 +75,19 @@ const technicians = [
       $("nextDay").addEventListener("click", () => shiftDate(1));
       $("todayBtn").addEventListener("click", () => {
         $("boardDate").value = new Date().toISOString().slice(0, 10);
+        state.shouldCenterNow = true;
         renderAll();
         loadHaloAppointments();
       });
       $("boardDate").addEventListener("change", () => {
+        state.shouldCenterNow = true;
         renderAll();
         loadHaloAppointments();
       });
       $("show24HoursCheck").addEventListener("change", () => {
         state.show24Hours = $("show24HoursCheck").checked;
         state.workingHours = state.show24Hours ? [0, 24] : [7, 17];
+        state.shouldCenterNow = true;
         saveLocalSettings();
         renderBoard();
       });
@@ -441,10 +447,15 @@ const technicians = [
       requestAnimationFrame(() => {
         document.querySelectorAll(".calendar[data-calendar-tech-id]").forEach(calendar => {
           const saved = state.calendarScroll[calendarScrollKey(calendar.dataset.calendarTechId)];
+          if (state.shouldCenterNow && isTodaySelected()) {
+            centerCalendarOnCurrentTime(calendar);
+            return;
+          }
           if (!saved) return;
           calendar.scrollTop = saved.top;
           calendar.scrollLeft = saved.left;
         });
+        state.shouldCenterNow = false;
       });
     }
 
@@ -454,6 +465,7 @@ const technicians = [
 
     function renderTimeSlots(techId, timed) {
       const slots = [];
+      const nowMarker = renderCurrentTimeMarker();
       for (let hour = state.workingHours[0]; hour < state.workingHours[1]; hour++) {
         for (const minute of [0, 30]) {
           const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
@@ -467,7 +479,46 @@ const technicians = [
           `);
         }
       }
-      return slots.join("");
+      return `${nowMarker}${slots.join("")}`;
+    }
+
+    function renderCurrentTimeMarker() {
+      const position = currentTimePosition();
+      if (position === null) return "";
+      return `
+        <div class="current-time-marker ${state.orientation}" style="--now-position:${position}%">
+          <span>${escapeHtml(formatTime(currentTimeString()))}</span>
+        </div>
+      `;
+    }
+
+    function currentTimePosition() {
+      if (!isTodaySelected()) return null;
+      const now = new Date();
+      const minutes = (now.getHours() * 60) + now.getMinutes();
+      const start = state.workingHours[0] * 60;
+      const end = state.workingHours[1] * 60;
+      if (minutes < start || minutes > end) return null;
+      return ((minutes - start) / (end - start)) * 100;
+    }
+
+    function currentTimeString() {
+      const now = new Date();
+      return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    }
+
+    function centerCalendarOnCurrentTime(calendar) {
+      const position = currentTimePosition();
+      if (position === null) return;
+      const grid = calendar.querySelector(".slot-grid");
+      if (!grid) return;
+      if (state.orientation === "vertical") {
+        const targetLeft = (grid.scrollWidth * (position / 100)) - (calendar.clientWidth / 2);
+        calendar.scrollLeft = Math.max(0, targetLeft);
+        return;
+      }
+      const targetTop = (grid.scrollHeight * (position / 100)) - (calendar.clientHeight / 2);
+      calendar.scrollTop = Math.max(0, targetTop);
     }
 
     function renderSmallEvent(item) {
@@ -1031,6 +1082,7 @@ const technicians = [
 
     function setOrientation(orientation) {
       state.orientation = orientation;
+      state.shouldCenterNow = true;
       $("horizontalBtn").classList.toggle("active", orientation === "horizontal");
       $("verticalBtn").classList.toggle("active", orientation === "vertical");
       renderBoard();
@@ -1040,6 +1092,7 @@ const technicians = [
       const date = new Date(`${$("boardDate").value}T00:00:00`);
       date.setDate(date.getDate() + days);
       $("boardDate").value = date.toISOString().slice(0, 10);
+      state.shouldCenterNow = true;
       renderAll();
       loadHaloAppointments();
     }
@@ -1102,6 +1155,15 @@ const technicians = [
       state.appointmentRefreshTimer = setInterval(() => {
         loadHaloAppointments({ quiet: true });
       }, state.appointmentRefreshMinutes * 60000);
+    }
+
+    function resetCurrentTimeTimer() {
+      if (state.currentTimeTimer) {
+        clearInterval(state.currentTimeTimer);
+      }
+      state.currentTimeTimer = setInterval(() => {
+        if (isTodaySelected()) renderBoard();
+      }, 60000);
     }
 
     async function loadHaloDateOnlyTasks(options = {}) {
@@ -1410,6 +1472,10 @@ const technicians = [
 
     function selectedDate() {
       return $("boardDate").value;
+    }
+
+    function isTodaySelected() {
+      return selectedDate() === new Date().toISOString().slice(0, 10);
     }
 
     function toast(title, message) {
