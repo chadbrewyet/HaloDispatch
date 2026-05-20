@@ -37,6 +37,7 @@ const technicians = [
       apiProxyUrl: "",
       appointmentRefreshMinutes: 5,
       appointmentRefreshTimer: null,
+      calendarScroll: {},
       pendingAppointment: null,
       activeTicketId: null,
       boardItems: []
@@ -310,11 +311,13 @@ const technicians = [
     }
 
     function renderBoard() {
+      captureCalendarScroll();
       const board = $("dispatchBoard");
       board.parentElement.className = `board-wrap ${state.orientation}`;
       board.className = `board ${state.orientation}`;
       const selectedTechs = state.selectedTechs.map(id => technicians.find(tech => tech.id === id)).filter(Boolean);
       board.innerHTML = selectedTechs.map(renderTechColumn).join("");
+      restoreCalendarScroll();
       wireTechReordering();
       wireDropZones();
       wireZoneExpanders();
@@ -338,7 +341,7 @@ const technicians = [
               ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
               ${renderTaskZone("noTime", tech.id, tech.name, "Tasks Without Time", noTime, "Drop ticket here to assign date only")}
             </div>
-            <div class="calendar">
+            <div class="calendar" data-calendar-tech-id="${tech.id}">
               <div class="time-axis">${renderTimeLabels()}</div>
               <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
             </div>
@@ -352,7 +355,7 @@ const technicians = [
             <div class="tech-load">${load} assigned</div>
           </header>
           ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
-          <div class="calendar">
+          <div class="calendar" data-calendar-tech-id="${tech.id}">
             <div class="time-axis">${renderTimeLabels()}</div>
             <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
           </div>
@@ -385,6 +388,30 @@ const technicians = [
         }
       }
       return labels.join("");
+    }
+
+    function captureCalendarScroll() {
+      document.querySelectorAll(".calendar[data-calendar-tech-id]").forEach(calendar => {
+        state.calendarScroll[calendarScrollKey(calendar.dataset.calendarTechId)] = {
+          top: calendar.scrollTop,
+          left: calendar.scrollLeft
+        };
+      });
+    }
+
+    function restoreCalendarScroll() {
+      requestAnimationFrame(() => {
+        document.querySelectorAll(".calendar[data-calendar-tech-id]").forEach(calendar => {
+          const saved = state.calendarScroll[calendarScrollKey(calendar.dataset.calendarTechId)];
+          if (!saved) return;
+          calendar.scrollTop = saved.top;
+          calendar.scrollLeft = saved.left;
+        });
+      });
+    }
+
+    function calendarScrollKey(techId) {
+      return `${state.orientation}:${techId}`;
     }
 
     function renderTimeSlots(techId, timed) {
