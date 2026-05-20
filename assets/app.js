@@ -392,10 +392,12 @@ const technicians = [
       for (let hour = state.workingHours[0]; hour < state.workingHours[1]; hour++) {
         for (const minute of [0, 30]) {
           const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-          const slotItems = timed.filter(item => slotForTime(item.time) === time);
+          const slotItems = timed
+            .filter(item => slotForTime(item.time) === time)
+            .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
           slots.push(`
-            <div class="time-slot" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
-              ${slotItems.map(renderAppointment).join("")}
+            <div class="time-slot ${slotItems.length > 1 ? "has-overlap" : ""}" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
+              ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length)).join("")}
             </div>
           `);
         }
@@ -408,10 +410,10 @@ const technicians = [
       return `<div class="small-event ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
     }
 
-    function renderAppointment(item) {
+    function renderAppointment(item, index = 0, count = 1) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
       return `
-        <div class="appointment ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed">
+        <div class="appointment ${count > 1 ? "overlap-card" : ""} ${ticketColorClass(ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
           <strong>#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Appointment")}</strong>
           <span>${escapeHtml(formatTime(item.time))} - ${item.duration || 30}m</span>
         </div>
@@ -659,12 +661,12 @@ const technicians = [
       renderAll();
     }
 
-    function moveScheduledItem(ticketId, techId, time) {
+    async function moveScheduledItem(ticketId, techId, time) {
       const item = state.boardItems.find(entry => entry.ticketId === ticketId);
       const ticket = tickets.find(entry => entry.id === ticketId);
       const tech = technicians.find(entry => entry.id === techId);
       if (!item || !ticket || !tech) return;
-      const haloTicketId = item.haloTicketId || ticketId;
+      const haloTicketId = item.haloTicketId || ticket.haloTicketId || null;
       const previous = { techId: item.techId, time: item.time, kind: item.kind };
       item.techId = techId;
       item.kind = "timed";
@@ -673,7 +675,7 @@ const technicians = [
       item.date = selectedDate();
       ticket.assignedTo = techId;
       ticket.dateField = selectedDate();
-      callHalo("updateAppointment", {
+      const result = await callHalo("updateAppointment", {
         ticketId: haloTicketId,
         previousTechnicianId: previous.techId,
         technicianId: techId,
@@ -686,6 +688,9 @@ const technicians = [
       const techChanged = previous.techId !== techId ? ` and assigned to ${tech.name}` : "";
       toast("Appointment updated", `#${ticketId} moved to ${formatTime(time)}${techChanged}.`);
       renderAll();
+      if (result?.ok) {
+        setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
+      }
     }
 
     function openAppointmentModal(ticket, tech, time) {
@@ -969,7 +974,7 @@ const technicians = [
         details: appointment.label || "",
         dateField: appointment.date,
         assignedTo: appointment.techId,
-        haloTicketId: appointment.haloTicketId || appointment.ticketId
+        haloTicketId: appointment.haloTicketId || null
       });
     }
 

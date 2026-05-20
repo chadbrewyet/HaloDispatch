@@ -718,6 +718,9 @@
       height: var(--slot-height);
       border-bottom: 1px solid var(--line);
       padding: 3px 5px;
+      display: flex;
+      gap: 4px;
+      align-items: stretch;
     }
 
     .board.vertical .time-slot {
@@ -735,6 +738,8 @@
 
     .appointment {
       width: 100%;
+      min-width: 0;
+      flex: 1 1 100%;
       min-height: 28px;
       border: 1px solid var(--appt-border);
       background: var(--appt);
@@ -746,6 +751,19 @@
       font-size: 11px;
       overflow: hidden;
       cursor: grab;
+    }
+
+    .time-slot.has-overlap .appointment {
+      flex-basis: 0;
+      padding-inline: 5px;
+    }
+
+    .appointment.overlap-card strong {
+      font-size: 11px;
+    }
+
+    .appointment.overlap-card span {
+      font-size: 10px;
     }
 
     .appointment strong {

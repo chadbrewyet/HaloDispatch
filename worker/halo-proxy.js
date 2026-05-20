@@ -292,12 +292,12 @@ async function handleReportRefresh(payload, env) {
 function appointmentPayload(payload, env, options = {}) {
   const startTime = payload.startTime || "00:00";
   const duration = Number(payload.durationMinutes || 30);
-  const startDate = options.allDay ? `${payload.date}T00:00:00` : combineDateTime(payload.date, startTime);
-  const endDate = options.allDay ? `${payload.date}T23:59:59` : combineDateTime(payload.date, addMinutes(startTime, duration));
+  const startDate = options.allDay ? `${payload.date}T00:00:00` : dispatchLocalToUtcDateTime(payload.date, startTime, env);
+  const endDate = options.allDay ? `${payload.date}T23:59:59` : dispatchLocalToUtcDateTime(payload.date, addMinutes(startTime, duration), env);
 
   return compactObject({
     id: options.appointmentId ? Number(options.appointmentId) : undefined,
-    ticket_id: Number(payload.ticketId),
+    ticket_id: payload.ticketId ? Number(payload.ticketId) : undefined,
     agent_id: haloAgentId(payload.technicianId, env),
     start_date: startDate,
     end_date: endDate,
@@ -305,7 +305,7 @@ function appointmentPayload(payload, env, options = {}) {
     note: payload.notes || undefined,
     status: payload.status || undefined,
     appointment_type_id: env.HALO_APPOINTMENT_TYPE_ID ? Number(env.HALO_APPOINTMENT_TYPE_ID) : undefined,
-    reassign_ticket: payload.assignTicket !== false
+    reassign_ticket: payload.ticketId ? payload.assignTicket !== false : undefined
   });
 }
 
@@ -350,6 +350,47 @@ function combineDateTime(date, time) {
     throw new Error("Appointments require both date and startTime.");
   }
   return `${date}T${time}:00`;
+}
+
+function dispatchLocalToUtcDateTime(date, time, env) {
+  if (!date || !time) {
+    throw new Error("Appointments require both date and startTime.");
+  }
+
+  const [year, month, day] = date.split("-").map(Number);
+  const [hour, minute] = time.split(":").map(Number);
+  const timeZone = env.HALO_DISPLAY_TIME_ZONE || "America/Chicago";
+  let utcMs = Date.UTC(year, month - 1, day, hour, minute, 0);
+
+  for (let index = 0; index < 3; index += 1) {
+    const offset = timeZoneOffsetMs(new Date(utcMs), timeZone);
+    utcMs = Date.UTC(year, month - 1, day, hour, minute, 0) - offset;
+  }
+
+  return new Date(utcMs).toISOString().slice(0, 19);
+}
+
+function timeZoneOffsetMs(date, timeZone) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit"
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map(part => [part.type, part.value]));
+  const localAsUtc = Date.UTC(
+    Number(byType.year),
+    Number(byType.month) - 1,
+    Number(byType.day),
+    Number(byType.hour),
+    Number(byType.minute),
+    Number(byType.second)
+  );
+  return localAsUtc - date.getTime();
 }
 
 function addMinutes(time, minutes) {
