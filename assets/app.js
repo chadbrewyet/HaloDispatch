@@ -681,6 +681,7 @@ const technicians = [
         technicianId: techId,
         previousStartTime: previous.time || null,
         startTime: time,
+        durationMinutes: item.duration || 30,
         appointmentId: item.appointmentId || null,
         date: $("boardDate").value,
         assignTicket: previous.techId !== techId

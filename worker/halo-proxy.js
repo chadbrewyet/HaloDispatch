@@ -100,7 +100,7 @@ function mapDashboardAction(action, payload, env) {
       return {
         method: "POST",
         path: "/api/Appointment",
-        body: [appointmentPayload(payload, env, { appointmentId: payload.appointmentId, allDay: false })]
+        body: [appointmentUpdatePayload(payload, env)]
       };
     case "createAllDayTask":
     case "moveToAllDayTask":
@@ -287,6 +287,21 @@ async function handleReportRefresh(payload, env) {
   }
 
   return { ok: true, reports: results };
+}
+
+function appointmentUpdatePayload(payload, env) {
+  const startTime = payload.startTime || "00:00";
+  const duration = Number(payload.durationMinutes || 30);
+
+  const body = compactObject({
+    id: Number(payload.appointmentId),
+    agent_id: haloAgentId(payload.technicianId, env),
+    start_date: dispatchLocalToUtcDateTime(payload.date, startTime, env),
+    end_date: dispatchLocalToUtcDateTime(payload.date, addMinutes(startTime, duration), env),
+    _force: true
+  });
+  console.log("updateAppointment payload", JSON.stringify(body));
+  return body;
 }
 
 function appointmentPayload(payload, env, options = {}) {
