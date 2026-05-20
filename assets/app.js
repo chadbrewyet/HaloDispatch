@@ -322,7 +322,7 @@ const technicians = [
     }
 
     function renderTechColumn(tech) {
-      const visibleItems = state.boardItems.filter(item => item.techId === tech.id && item.date === selectedDate());
+      const visibleItems = state.boardItems.filter(item => String(item.techId) === String(tech.id) && isSelectedDate(item.date));
       const allDay = visibleItems.filter(item => item.kind === "allDay");
       const noTime = visibleItems.filter(item => item.kind === "noTime");
       const timed = visibleItems.filter(item => item.kind === "timed");
@@ -664,6 +664,7 @@ const technicians = [
       const ticket = tickets.find(entry => entry.id === ticketId);
       const tech = technicians.find(entry => entry.id === techId);
       if (!item || !ticket || !tech) return;
+      const haloTicketId = item.haloTicketId || ticketId;
       const previous = { techId: item.techId, time: item.time, kind: item.kind };
       item.techId = techId;
       item.kind = "timed";
@@ -673,7 +674,7 @@ const technicians = [
       ticket.assignedTo = techId;
       ticket.dateField = selectedDate();
       callHalo("updateAppointment", {
-        ticketId,
+        ticketId: haloTicketId,
         previousTechnicianId: previous.techId,
         technicianId: techId,
         previousStartTime: previous.time || null,
@@ -908,6 +909,7 @@ const technicians = [
       if (!result?.ok) return;
       syncHaloAppointments(result.data?.appointments || []);
       renderBoard();
+      console.log("HaloPSA board appointment sync", appointmentVisibilitySummary(result.data?.appointments || []));
       if (!options.quiet && result.data?.appointments?.length) {
         toast("Halo appointments loaded", `${result.data.appointments.length} calendar items matched this view.`);
       }
@@ -928,8 +930,8 @@ const technicians = [
     function syncHaloAppointments(appointments) {
       const visibleTechs = new Set(state.selectedTechs);
       state.boardItems = state.boardItems.filter(item => {
-        const sameDate = item.date === selectedDate();
-        const sameTech = visibleTechs.has(item.techId);
+        const sameDate = isSelectedDate(item.date);
+        const sameTech = visibleTechs.has(String(item.techId));
         return item.source !== "haloAppointment" || !sameDate || !sameTech;
       });
 
@@ -937,6 +939,18 @@ const technicians = [
         hydrateTicketFromAppointment(appointment);
         state.boardItems.push(appointment);
       });
+    }
+
+    function appointmentVisibilitySummary(appointments) {
+      const visibleTechs = new Set(state.selectedTechs.map(String));
+      const visibleAppointments = appointments.filter(item => visibleTechs.has(String(item.techId)) && isSelectedDate(item.date));
+      return {
+        received: appointments.length,
+        visible: visibleAppointments.length,
+        selectedDate: selectedDate(),
+        selectedTechs: Array.from(visibleTechs),
+        sample: appointments.slice(0, 5)
+      };
     }
 
     function hydrateTicketFromAppointment(appointment) {
@@ -954,7 +968,8 @@ const technicians = [
         contact: "",
         details: appointment.label || "",
         dateField: appointment.date,
-        assignedTo: appointment.techId
+        assignedTo: appointment.techId,
+        haloTicketId: appointment.haloTicketId || appointment.ticketId
       });
     }
 
@@ -1142,8 +1157,12 @@ const technicians = [
     }
 
     function shouldShowTicketCard(ticket) {
-      if (ticket.dateField && ticket.dateField !== selectedDate()) return false;
+      if (ticket.dateField && !isSelectedDate(ticket.dateField)) return false;
       return !isTicketScheduled(ticket.id);
+    }
+
+    function isSelectedDate(value) {
+      return String(value || "").slice(0, 10) === selectedDate();
     }
 
     function slotForTime(time) {

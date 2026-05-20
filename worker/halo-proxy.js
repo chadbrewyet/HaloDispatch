@@ -156,11 +156,13 @@ async function handleAppointmentLoad(payload, env) {
       id: appointment.id || appointment.appointment_id,
       ticket_id: appointment.ticket_id,
       agent_id: appointment.agent_id,
+      agents: Array.isArray(appointment.agents) ? appointment.agents.slice(0, 3) : undefined,
       start_date: appointment.start_date,
       end_date: appointment.end_date,
       allday: appointment.allday,
       subject: appointment.subject
-    }))
+    })),
+    normalizedSample: appointments.slice(0, 5)
   }));
 
   return {
@@ -175,8 +177,9 @@ async function handleAppointmentLoad(payload, env) {
 }
 
 function normalizeAppointment(appointment, date, allowedAgentIds) {
-  const ticketId = appointment.ticket_id ?? appointment.faultid ?? appointment.fault_id;
-  if (!ticketId) return [];
+  const ticketId = appointment.ticket_id ?? appointment.faultid ?? appointment.fault_id ?? appointment.apfaultid;
+  const displayId = ticketId ?? appointment.id ?? appointment.appointment_id;
+  if (!displayId) return [];
 
   const agentIds = appointmentAgentIds(appointment).filter(agentId => allowedAgentIds.includes(agentId));
   if (!agentIds.length) return [];
@@ -186,11 +189,12 @@ function normalizeAppointment(appointment, date, allowedAgentIds) {
   const startTime = timePart(startDate) || "00:00";
   const duration = appointment.allday ? 1440 : durationMinutes(startDate, endDate);
   const kind = appointment.allday ? "allDay" : "timed";
-  const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Ticket #${ticketId}`;
+  const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
 
   return agentIds.map(agentId => ({
     appointmentId: String(appointment.id || appointment.appointment_id || ""),
-    ticketId: Number(ticketId),
+    ticketId: Number(displayId),
+    haloTicketId: ticketId ? Number(ticketId) : null,
     techId: agentId,
     kind,
     time: kind === "timed" ? startTime : undefined,
@@ -204,9 +208,14 @@ function normalizeAppointment(appointment, date, allowedAgentIds) {
 function appointmentAgentIds(appointment) {
   const agents = Array.isArray(appointment.agents) ? appointment.agents : [];
   const fromAgents = agents
-    .map(agent => agent.id ?? agent.agent_id)
+    .map(agent => agent.id ?? agent.agent_id ?? agent.agentid ?? agent.agentId)
     .filter(value => value !== undefined && value !== null);
-  const primary = appointment.agent_id ? [appointment.agent_id] : [];
+  const primary = [
+    appointment.agent_id,
+    appointment.agentid,
+    appointment.agentId,
+    appointment.scheduled_for_id
+  ].filter(value => value !== undefined && value !== null);
   return Array.from(new Set([...primary, ...fromAgents].map(String)));
 }
 
