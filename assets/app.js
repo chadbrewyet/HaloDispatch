@@ -248,8 +248,18 @@ const technicians = [
       document.body.classList.toggle("ticket-panel-open", state.ticketPanelOpen);
       document.body.classList.toggle("ticket-panel-pinned", state.ticketPanelPinned);
       document.documentElement.style.setProperty("--ticket-panel-width", `${state.ticketPanelWidth}px`);
-      $("pinTicketPanelBtn").textContent = state.ticketPanelPinned ? "^" : "v";
+      $("pinTicketPanelBtn").innerHTML = pinIconSvg();
+      $("pinTicketPanelBtn").classList.toggle("active", state.ticketPanelPinned);
       $("pinTicketPanelBtn").title = state.ticketPanelPinned ? "Unpin ticket panel" : "Pin ticket panel";
+      $("pinTicketPanelBtn").setAttribute("aria-label", state.ticketPanelPinned ? "Unpin ticket panel" : "Pin ticket panel");
+    }
+
+    function pinIconSvg() {
+      return `
+        <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true">
+          <path d="M15 4.5 19.5 9l-2 2 2.3 2.3-1.5 1.5-3.1-3.1-3.3 3.3v4.6l-1.2 1.2-2.9-6.1-5.1-2.5 1.2-1.2h4.6l3.3-3.3-3.1-3.1L10.2 3l2.3 2.3 2.5-2.5Z" fill="currentColor"/>
+        </svg>
+      `;
     }
 
     function setTicketPanelOpen(open) {
