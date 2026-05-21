@@ -357,8 +357,8 @@
       min-height: 0;
       overflow: auto;
       padding: 10px;
-      display: grid;
-      grid-auto-rows: minmax(0, 1fr);
+      display: flex;
+      flex-direction: column;
       gap: 10px;
       background: var(--ticket-band);
     }
@@ -368,49 +368,38 @@
       border: 1px solid var(--line);
       border-radius: var(--radius);
       overflow: hidden;
-      min-height: 0;
+      min-height: 220px;
       max-height: none;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+      flex: 1 1 auto;
+    }
+
+    .report-lists.expanded-count-1 .report-list:not(.collapsed) {
+      flex-basis: 100%;
+      max-height: none;
+    }
+
+    .report-lists.expanded-count-2 .report-list:not(.collapsed) {
+      flex-basis: calc((100% - 10px) / 2);
+      max-height: calc((100% - 10px) / 2);
+    }
+
+    .report-lists.expanded-count-3 .report-list:not(.collapsed) {
+      flex: 0 0 min(50%, 420px);
+      max-height: 50%;
     }
 
     .report-list.collapsed {
       grid-template-rows: auto;
       height: auto !important;
       min-height: 0;
+      flex: 0 0 auto;
     }
 
     .report-list.collapsed .ticket-stack,
     .report-list.collapsed .report-meta {
       display: none;
-    }
-
-    .section-resizer {
-      height: 10px;
-      margin: -2px 8px 2px;
-      border-radius: 999px;
-      border: 1px solid transparent;
-      cursor: row-resize;
-      display: grid;
-      place-items: center;
-    }
-
-    .section-resizer::before {
-      content: "";
-      width: 48px;
-      height: 3px;
-      border-radius: 999px;
-      background: var(--line-strong);
-    }
-
-    .section-resizer:hover {
-      border-color: var(--line);
-      background: var(--soft);
-    }
-
-    .section-resizer.active {
-      border-color: var(--accent);
-      background: var(--soft);
     }
 
     .report-list header {

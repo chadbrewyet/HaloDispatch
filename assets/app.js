@@ -226,6 +226,8 @@ const technicians = [
 
     function closeFloatingSurfaces(event) {
       const target = event.target;
+      const path = event.composedPath ? event.composedPath() : [];
+      const clickedInTicketPanel = path.some(node => node?.classList?.contains("left-panel")) || Boolean(target.closest(".left-panel"));
       if ($("appointmentModal").classList.contains("open") && target === $("appointmentModal")) {
         closeAppointmentModal();
       }
@@ -235,7 +237,7 @@ const technicians = [
       if ($("configDrawer").classList.contains("open") && !target.closest("#configDrawer") && !target.closest("#settingsBtn")) {
         $("configDrawer").classList.remove("open");
       }
-      if (state.ticketPanelOpen && !state.ticketPanelPinned && !target.closest(".left-panel") && !target.closest("#ticketPanelToggle")) {
+      if (state.ticketPanelOpen && !state.ticketPanelPinned && !clickedInTicketPanel && !target.closest("#ticketPanelToggle")) {
         setTicketPanelOpen(false);
       }
       if ($("zoneModal").classList.contains("open") && !target.closest("#zoneModal") && !target.closest("[data-expand-zone]")) {
@@ -419,6 +421,8 @@ const technicians = [
         const report = reports.find(item => item.id === reportId) || reports[0];
         return tickets.filter(ticket => ticket.report === report.id && shouldShowTicketCard(ticket)).length;
       });
+      const expandedCount = state.reportLists.filter((reportId, index) => !state.collapsedLists[sectionKey(index)]).length;
+      $("reportLists").className = `report-lists expanded-count-${Math.min(expandedCount, 3)}`;
       $("reportLists").innerHTML = state.reportLists.map((reportId, index) => renderReportList(reportId, index)).join("");
       updateTicketPanelBadges(counts);
       $("reportLists").querySelectorAll("[data-report-select]").forEach(select => {
@@ -450,8 +454,6 @@ const technicians = [
           renderReportLists();
         });
       });
-      observeResizableSections();
-      wireSectionResizers();
       makeTicketsDraggable();
     }
 
@@ -468,11 +470,9 @@ const technicians = [
       const options = reports.map(item => `<option value="${item.id}" ${item.id === report.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("");
       const key = sectionKey(index);
       const view = state.listViews[key] || "card";
-      const canResize = state.reportLists.length > 1;
       const collapsed = Boolean(state.collapsedLists[key]);
-      const sizeStyle = canResize && !collapsed && state.sectionSizes[key] ? `style="height:${state.sectionSizes[key]}px"` : "";
       return `
-        <section class="report-list ${collapsed ? "collapsed" : ""}" data-resize-key="${key}" ${sizeStyle}>
+        <section class="report-list ${collapsed ? "collapsed" : ""}">
           <header>
             <button class="icon chevron-button" data-list-toggle="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">${collapsed ? "⌃" : "⌄"}</button>
             <div class="report-name">${escapeHtml(report.name)}</div>
@@ -490,7 +490,6 @@ const technicians = [
             ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets in this report.</div>`}
           </div>
         </section>
-        ${canResize && !collapsed && index < state.reportLists.length - 1 ? `<div class="section-resizer" data-resizer-for="${key}" title="Drag to resize this ticket list"></div>` : ""}
       `;
     }
 
