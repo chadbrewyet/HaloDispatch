@@ -9,6 +9,13 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "Content-Type,Authorization"
 };
 
+const excludedTicketTypeNames = new Set([
+  "lead",
+  "sales/opportunity",
+  "sales/opportunity - nonactive",
+  "quick quote"
+]);
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -48,6 +55,14 @@ async function handleDashboardAction(body, env) {
 
   if (action === "loadTechnicians") {
     return handleTechnicianLoad(payload, env);
+  }
+
+  if (action === "loadTicketTypes") {
+    return handleTicketTypeLoad(payload, env);
+  }
+
+  if (action === "loadTickets") {
+    return handleTicketLoad(payload, env);
   }
 
   if (action === "loadAppointments") {
@@ -156,6 +171,107 @@ async function handleCreateAppointmentFromDateOnly(payload, env) {
     method: "POST",
     body: [appointmentPayload(payload, env, { allDay: Boolean(payload.allday) })]
   });
+}
+
+async function handleTicketTypeLoad(payload, env) {
+  const params = new URLSearchParams({
+    domain: "reqs",
+    canagentsselect: "true",
+    page_size: "500"
+  });
+  const haloPath = `/api/TicketType?${params.toString()}`;
+  const response = await haloRequest(env, haloPath, { method: "GET" });
+  const rawTypes = unwrapList(response.data);
+  const ticketTypes = rawTypes
+    .map(normalizeTicketType)
+    .filter(Boolean)
+    .filter(type => !excludedTicketTypeNames.has(type.name.toLowerCase()))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    ok: true,
+    data: { ticketTypes },
+    meta: {
+      haloPath,
+      rawCount: rawTypes.length,
+      normalizedCount: ticketTypes.length,
+      excludedTypes: Array.from(excludedTicketTypeNames)
+    }
+  };
+}
+
+async function handleTicketLoad(payload, env) {
+  const ticketTypeIds = (payload.ticketTypeIds || []).map(String).filter(Boolean);
+  const params = new URLSearchParams({
+    includeallopen: "true",
+    includeclosed: "0",
+    includecompleted: "false",
+    includetickettype: "true",
+    includestatus: "true",
+    include_custom_fields: env.HALO_DISPATCH_DATE_FIELD_ID || "",
+    page_size: "500",
+    count: "500",
+    order: "dateoccured",
+    orderdesc: "true"
+  });
+  if (ticketTypeIds.length) {
+    params.set("requesttype", ticketTypeIds.join(","));
+  }
+
+  const haloPath = `/api/Tickets?${params.toString()}`;
+  console.log("loadTickets request", JSON.stringify({ ticketTypeIds, haloPath }));
+  const response = await haloRequest(env, haloPath, { method: "GET" });
+  const rawTickets = unwrapList(response.data);
+  const tickets = rawTickets
+    .map(ticket => normalizeTicket(ticket, env))
+    .filter(Boolean)
+    .filter(ticket => !ticket.completed)
+    .filter(ticket => !excludedTicketTypeNames.has(ticket.type.toLowerCase()))
+    .filter(ticket => !ticketTypeIds.length || ticketTypeIds.includes(String(ticket.typeId)));
+
+  return {
+    ok: true,
+    data: { tickets },
+    meta: {
+      haloPath,
+      rawCount: rawTickets.length,
+      normalizedCount: tickets.length,
+      selectedTicketTypes: ticketTypeIds,
+      excludedTypes: Array.from(excludedTicketTypeNames)
+    }
+  };
+}
+
+function normalizeTicketType(type) {
+  const id = type.id ?? type.requesttype_id ?? type.rtid;
+  const name = stripHtml(type.name || type.requesttype_name || type.requesttype || type.tickettype || type.description || "");
+  if (!id || !name) return null;
+  return { id: String(id), name };
+}
+
+function normalizeTicket(ticket, env) {
+  const id = ticket.id ?? ticket.faultid ?? ticket.fault_id;
+  if (!id) return null;
+  const typeId = ticket.requesttype_id ?? ticket.tickettype_id ?? ticket.type_id ?? ticket.requesttypeid;
+  const typeName = stripHtml(ticket.requesttype_name || ticket.requesttype || ticket.request_type || ticket.tickettype_name || ticket.tickettype || ticket.ticket_type || ticket.type || "");
+  const customDate = customFieldValue(ticket, env.HALO_DISPATCH_DATE_FIELD_ID || "486");
+  return {
+    id: Number(id),
+    haloTicketId: Number(id),
+    client: stripHtml(ticket.client_name || ticket.client || ticket.username || ticket.customer || ""),
+    title: stripHtml(ticket.summary || ticket.subject || ticket.title || `Ticket #${id}`),
+    priority: stripHtml(ticket.priority || ticket.priority_name || ticket.seriousness || ""),
+    type: typeName,
+    typeId: typeId ? String(typeId) : "",
+    site: stripHtml(ticket.site_name || ticket.sitename || ticket.site || ""),
+    sla: stripHtml(ticket.sla || ticket.sla_name || ticket.slastate || ""),
+    estimate: ticket.estimatedays || ticket.estimate || "",
+    contact: stripHtml(ticket.user_name || ticket.contact_name || ticket.contact || ""),
+    details: stripHtml(ticket.details || ticket.detail || ticket.lastnote || ticket.last_note || ""),
+    dateField: customDate,
+    assignedTo: ticket.agent_id ? String(ticket.agent_id) : "",
+    completed: isCompletedTicket(ticket)
+  };
 }
 
 async function handleAppointmentLoad(payload, env) {
@@ -617,6 +733,11 @@ function isTrue(value) {
 function unwrapList(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.agents)) return data.agents;
+  if (Array.isArray(data?.ticketTypes)) return data.ticketTypes;
+  if (Array.isArray(data?.requesttypes)) return data.requesttypes;
+  if (Array.isArray(data?.requestTypes)) return data.requestTypes;
+  if (Array.isArray(data?.tickets)) return data.tickets;
+  if (Array.isArray(data?.faults)) return data.faults;
   if (Array.isArray(data?.users)) return data.users;
   if (Array.isArray(data?.record)) return data.record;
   if (Array.isArray(data?.records)) return data.records;

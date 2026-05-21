@@ -4,15 +4,19 @@ const technicians = [
     const teams = [
     ];
 
-    const reports = [];
+    const reports = [
+      { id: "api-open", name: "Open Tickets", reportId: "api-tickets" }
+    ];
 
     const tickets = [];
+    const ticketTypes = [];
 
     const state = {
       selectedTeams: [],
       selectedTechs: [],
+      selectedTicketTypes: [],
       orientation: "horizontal",
-      reportLists: [],
+      reportLists: ["api-open"],
       visibleFields: ["client", "sla", "estimate"],
       workingHours: [7, 17],
       show24Hours: false,
@@ -58,6 +62,7 @@ const technicians = [
       applyTheme();
       renderTeamSelect();
       renderTechPicker();
+      renderTicketTypeSelect();
       renderFieldChecks();
       renderReportLists();
       renderBoard();
@@ -70,6 +75,8 @@ const technicians = [
       resetCurrentTimeTimer();
       toast("Ready", "Dispatch board loaded. HaloPSA actions run in mock mode until a Worker API URL is saved.");
       loadHaloTechnicians();
+      loadHaloTicketTypes();
+      loadHaloTickets({ quiet: true });
     }
 
     function bindEvents() {
@@ -172,6 +179,7 @@ const technicians = [
         if (saved.appointmentRefreshMinutes !== undefined) {
           state.appointmentRefreshMinutes = Number(saved.appointmentRefreshMinutes);
         }
+        if (Array.isArray(saved.selectedTicketTypes)) state.selectedTicketTypes = saved.selectedTicketTypes.map(String);
         if (saved.selectionDefaultsVersion >= 1 && Array.isArray(saved.selectedTeams)) state.selectedTeams = saved.selectedTeams.map(String);
         if (saved.selectionDefaultsVersion >= 1 && Array.isArray(saved.selectedTechs)) state.selectedTechs = saved.selectedTechs.map(String);
         $("appointmentRefreshSelect").value = String(state.appointmentRefreshMinutes);
@@ -202,6 +210,7 @@ const technicians = [
         appointmentRefreshMinutes: state.appointmentRefreshMinutes,
         selectedTeams: state.selectedTeams,
         selectedTechs: state.selectedTechs,
+        selectedTicketTypes: state.selectedTicketTypes,
         selectionDefaultsVersion: 1
       }));
     }
@@ -351,6 +360,28 @@ const technicians = [
       });
     }
 
+    function renderTicketTypeSelect() {
+      const picker = $("ticketTypePicker");
+      const selected = new Set(state.selectedTicketTypes.map(String));
+      $("ticketTypeSummary").textContent = state.selectedTicketTypes.length
+        ? summaryText(state.selectedTicketTypes.length, ticketTypes.length, "type", "types")
+        : "All open ticket types";
+      picker.innerHTML = ticketTypes.map(type => `
+        <label class="agent-option">
+          <input type="checkbox" value="${type.id}" ${selected.has(String(type.id)) ? "checked" : ""}>
+          <span>${escapeHtml(type.name)}</span>
+        </label>
+      `).join("") || `<div class="empty">Ticket types will load from Halo.</div>`;
+      picker.querySelectorAll("input").forEach(input => {
+        input.addEventListener("change", () => {
+          state.selectedTicketTypes = Array.from(picker.querySelectorAll("input:checked")).map(item => item.value);
+          saveLocalSettings();
+          renderTicketTypeSelect();
+          loadHaloTickets();
+        });
+      });
+    }
+
     function filteredTechnicians() {
       if (!state.selectedTeams.length) return [];
       const selectedTeams = new Set(state.selectedTeams.map(String));
@@ -388,7 +419,7 @@ const technicians = [
 
     function renderReportLists() {
       if (!reports.length) {
-        $("reportLists").innerHTML = `<div class="empty">No Halo report lists configured yet.</div>`;
+        $("reportLists").innerHTML = `<div class="empty">No ticket lists configured yet.</div>`;
         updateTicketPanelBadges([]);
         return;
       }
@@ -1172,11 +1203,11 @@ const technicians = [
 
     function addReportList() {
       if (!reports.length) {
-        toast("No reports configured", "Add published Halo report IDs before adding ticket lists.");
+        toast("No ticket views configured", "Ticket views will become configurable in the next filter pass.");
         return;
       }
       if (state.reportLists.length >= 3) {
-        toast("List limit reached", "You can show up to 3 report-backed ticket lists.");
+        toast("List limit reached", "You can show up to 3 ticket lists.");
         return;
       }
       const next = reports.find(report => !state.reportLists.includes(report.id)) || reports[0];
@@ -1229,6 +1260,8 @@ const technicians = [
       resetAppointmentRefreshTimer();
       toast("Connection settings saved", state.apiProxyUrl || "Mock mode remains active until the Worker URL is added.");
       loadHaloTechnicians();
+      loadHaloTicketTypes();
+      loadHaloTickets();
     }
 
     async function loadHaloTechnicians() {
@@ -1250,6 +1283,85 @@ const technicians = [
       renderBoard();
       toast("Halo names loaded", `${data.technicians.length} agents are available for dispatch.`);
       loadHaloAppointments();
+    }
+
+    async function loadHaloTicketTypes() {
+      if (!state.apiProxyUrl) return;
+      const result = await callHalo("loadTicketTypes", {}, { quiet: true });
+      if (!result?.ok) return;
+      syncHaloTicketTypes(result.data?.ticketTypes || []);
+      renderTicketTypeSelect();
+    }
+
+    function syncHaloTicketTypes(types) {
+      ticketTypes.splice(0, ticketTypes.length, ...types.map(type => ({
+        id: String(type.id),
+        name: type.name || `Type ${type.id}`
+      })));
+      const validIds = new Set(ticketTypes.map(type => type.id));
+      state.selectedTicketTypes = state.selectedTicketTypes.filter(id => validIds.has(String(id)));
+      saveLocalSettings();
+    }
+
+    async function loadHaloTickets(options = {}) {
+      if (!state.apiProxyUrl) {
+        if (!options.quiet) toast("Worker URL missing", "Add the Cloudflare Worker URL in Settings first.");
+        return;
+      }
+      const result = await callHalo("loadTickets", {
+        ticketTypeIds: state.selectedTicketTypes
+      }, { quiet: true });
+      console.log("HaloPSA ticket load result", result?.meta || result);
+      if (!result?.ok) return;
+      syncHaloTickets(result.data?.tickets || []);
+      renderReportLists();
+      renderPool();
+      if (!options.quiet) {
+        toast("Tickets loaded", `${result.data?.tickets?.length || 0} open tickets matched the current type filter.`);
+      }
+    }
+
+    function syncHaloTickets(loadedTickets) {
+      for (let index = tickets.length - 1; index >= 0; index -= 1) {
+        if (tickets[index].source === "haloTicket") tickets.splice(index, 1);
+      }
+      loadedTickets.forEach(ticket => {
+        const normalized = normalizeHaloTicket(ticket);
+        if (!normalized) return;
+        const existing = tickets.find(item => item.id === normalized.id);
+        if (existing) {
+          Object.assign(existing, normalized, {
+            dateField: existing.dateField || normalized.dateField,
+            assignedTo: existing.assignedTo || normalized.assignedTo,
+            completed: existing.completed || normalized.completed
+          });
+          return;
+        }
+        tickets.push(normalized);
+      });
+    }
+
+    function normalizeHaloTicket(ticket) {
+      const id = Number(ticket.id || ticket.ticketId || ticket.haloTicketId);
+      if (!id) return null;
+      return {
+        id,
+        client: ticket.client || "",
+        title: ticket.title || `Ticket #${id}`,
+        priority: ticket.priority || "",
+        type: ticket.type || "",
+        report: "api-open",
+        site: ticket.site || "",
+        sla: ticket.sla || "",
+        estimate: ticket.estimate || "",
+        contact: ticket.contact || "",
+        details: ticket.details || "",
+        dateField: ticket.dateField || "",
+        assignedTo: ticket.assignedTo || "",
+        haloTicketId: ticket.haloTicketId || id,
+        completed: Boolean(ticket.completed),
+        source: "haloTicket"
+      };
     }
 
     async function loadHaloAppointments(options = {}) {
@@ -1483,11 +1595,7 @@ const technicians = [
     }
 
     function refreshReports() {
-      callHalo("refreshReports", {
-        reports: state.reportLists.map(id => reports.find(report => report.id === id)?.reportId),
-        date: $("boardDate").value
-      });
-      toast("Report refresh requested", "This is where HaloPSA report results will repopulate the ticket lists.");
+      loadHaloTickets();
     }
 
     async function testWorkerConnection(options = {}) {

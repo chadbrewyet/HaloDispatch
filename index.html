@@ -21,7 +21,7 @@
       </div>
       <div class="api-status">
         <span class="api-pill" id="apiState">HaloPSA mock mode</span>
-        <button id="refreshBtn" class="primary compact-action">Refresh Reports</button>
+        <button id="refreshBtn" class="primary compact-action">Refresh Tickets</button>
       </div>
       <div class="view-controls">
         <label class="toggle-field header-toggle">
@@ -133,6 +133,16 @@
           <details class="multi-dropdown">
             <summary id="settingsAgentSummary">Select Agents</summary>
             <div class="agent-picker" id="settingsAgentPicker"></div>
+          </details>
+        </div>
+      </details>
+      <details class="settings-card accordion-section">
+        <summary><h3>Ticket Type Filters</h3></summary>
+        <div class="field">
+          <label>Ticket Types</label>
+          <details class="multi-dropdown">
+            <summary id="ticketTypeSummary">All open ticket types</summary>
+            <div class="agent-picker" id="ticketTypePicker"></div>
           </details>
         </div>
       </details>

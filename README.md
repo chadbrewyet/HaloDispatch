@@ -65,7 +65,8 @@ The API token should have permission to edit Workers for the Cloudflare account 
 
 The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
 
-- report refresh: `GET /api/ReportData/{publishedid}`
+- ticket type filter load: `GET /api/TicketType`
+- open ticket load: `GET /api/Tickets`
 - calendar appointment load: `GET /api/Appointment`
 - without-time task load: `GET /api/Tickets`
 - timed appointment creation: `POST /api/Appointment`
@@ -80,6 +81,8 @@ Appointment refresh can be configured in Settings. The default is every 5 minute
 Current Halo configuration:
 
 - agent/team selection is loaded from `GET /api/Agent`
+- ticket lists are loaded from `GET /api/Tickets`
+- ticket type filters are loaded from `GET /api/TicketType`
 - without-time task date field: `CFTaskWithoutTimeDate` / `486`
 - ticket URL prefix: `https://gagepsa.halopsa.com/ticket?id=`
 
@@ -87,6 +90,6 @@ Technician and team display names are loaded from `GET /api/Agent`. A technician
 
 ## Still Needed From HaloPSA
 
-To finish the live integration, we still need:
+To finish the live ticket views, we still need:
 
-- published report IDs for the ticket lists
+- per-section ticket list filter options
