@@ -77,6 +77,14 @@
       color: #fff;
     }
 
+    button.compact-action {
+      min-height: 30px;
+      padding: 0 9px;
+      font-size: 12px;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
     button.icon {
       width: 34px;
       padding: 0;
@@ -142,6 +150,8 @@
       align-items: center;
       gap: 8px;
     }
+
+    .api-status { min-width: 0; }
 
     .date-controls { margin-right: 10px; }
     .view-controls { margin-left: auto; }
@@ -386,7 +396,7 @@
 
     .filters {
       display: grid;
-      grid-template-columns: minmax(150px, 190px) minmax(150px, 190px) auto;
+      grid-template-columns: minmax(150px, 190px);
       gap: 10px;
       align-items: end;
       padding: 12px 14px;
@@ -1095,6 +1105,48 @@
       gap: 10px;
     }
 
+    details.settings-card {
+      padding: 0;
+      overflow: hidden;
+    }
+
+    details.settings-card > summary {
+      list-style: none;
+      cursor: pointer;
+      padding: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    details.settings-card > summary::-webkit-details-marker {
+      display: none;
+    }
+
+    details.settings-card > summary::after {
+      content: "+";
+      color: var(--muted);
+      font-weight: 900;
+      font-size: 16px;
+    }
+
+    details.settings-card[open] > summary {
+      border-bottom: 1px solid var(--line);
+    }
+
+    details.settings-card[open] > summary::after {
+      content: "-";
+    }
+
+    details.settings-card > summary h3 {
+      margin: 0;
+    }
+
+    details.settings-card > :not(summary) {
+      margin: 12px;
+    }
+
     .checks {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -1304,5 +1356,5 @@
     @media (max-width: 1280px) {
       body { min-width: 1080px; }
       .workspace { grid-template-columns: 326px minmax(0, 1fr); }
-      .filters { grid-template-columns: 180px 180px auto; }
+      .filters { grid-template-columns: 180px; }
     }

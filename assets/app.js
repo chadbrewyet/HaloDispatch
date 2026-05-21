@@ -110,6 +110,7 @@ const technicians = [
       $("verticalBtn").addEventListener("click", () => setOrientation("vertical"));
       $("settingsBtn").addEventListener("click", () => $("configDrawer").classList.add("open"));
       $("closeSettingsBtn").addEventListener("click", () => $("configDrawer").classList.remove("open"));
+      wireSettingsAccordion();
       $("saveApiBtn").addEventListener("click", saveApiSettings);
       $("testWorkerBtn").addEventListener("click", testWorkerConnection);
       $("appointmentRefreshSelect").addEventListener("change", () => {
@@ -136,6 +137,7 @@ const technicians = [
       $("ticketExternalBtn").addEventListener("click", openTicketExternal);
       document.addEventListener("click", event => {
         if (!event.target.closest(".ticket-popover")) closeTicketPopover();
+        closeFloatingSurfaces(event);
       });
     }
 
@@ -161,8 +163,8 @@ const technicians = [
         if (saved.appointmentRefreshMinutes !== undefined) {
           state.appointmentRefreshMinutes = Number(saved.appointmentRefreshMinutes);
         }
-        if (Array.isArray(saved.selectedTeams)) state.selectedTeams = saved.selectedTeams.map(String);
-        if (Array.isArray(saved.selectedTechs)) state.selectedTechs = saved.selectedTechs.map(String);
+        if (saved.selectionDefaultsVersion >= 1 && Array.isArray(saved.selectedTeams)) state.selectedTeams = saved.selectedTeams.map(String);
+        if (saved.selectionDefaultsVersion >= 1 && Array.isArray(saved.selectedTechs)) state.selectedTechs = saved.selectedTechs.map(String);
         $("appointmentRefreshSelect").value = String(state.appointmentRefreshMinutes);
         if (saved.apiBaseUrl) state.apiBaseUrl = saved.apiBaseUrl;
         $("apiBaseUrl").value = state.apiBaseUrl;
@@ -188,7 +190,8 @@ const technicians = [
         apiProxyUrl: state.apiProxyUrl,
         appointmentRefreshMinutes: state.appointmentRefreshMinutes,
         selectedTeams: state.selectedTeams,
-        selectedTechs: state.selectedTechs
+        selectedTechs: state.selectedTechs,
+        selectionDefaultsVersion: 1
       }));
     }
 
@@ -196,17 +199,54 @@ const technicians = [
       document.body.dataset.theme = state.theme;
     }
 
+    function wireSettingsAccordion() {
+      document.querySelectorAll(".drawer-body > .settings-card").forEach(section => {
+        section.addEventListener("toggle", () => {
+          if (!section.open) return;
+          document.querySelectorAll(".drawer-body > .settings-card").forEach(other => {
+            if (other !== section) other.open = false;
+          });
+        });
+      });
+    }
+
+    function closeFloatingSurfaces(event) {
+      const target = event.target;
+      if ($("appointmentModal").classList.contains("open") && target === $("appointmentModal")) {
+        closeAppointmentModal();
+      }
+      if ($("ticketModal").classList.contains("open") && target === $("ticketModal")) {
+        closeTicketModal();
+      }
+      if ($("configDrawer").classList.contains("open") && !target.closest("#configDrawer") && !target.closest("#settingsBtn")) {
+        $("configDrawer").classList.remove("open");
+      }
+      if ($("zoneModal").classList.contains("open") && !target.closest("#zoneModal") && !target.closest("[data-expand-zone]")) {
+        closeZoneModal();
+      }
+      document.querySelectorAll(".multi-dropdown[open]").forEach(dropdown => {
+        if (!dropdown.contains(target)) dropdown.open = false;
+      });
+    }
+
     function renderTeamSelect() {
       const picker = $("settingsTeamPicker");
-      picker.innerHTML = teams.map(team => `
+      const allSelected = teams.length > 0 && teams.every(team => state.selectedTeams.includes(team.id));
+      picker.innerHTML = `
+        <label class="agent-option select-all">
+          <input type="checkbox" value="__all" ${allSelected ? "checked" : ""}>
+          <span>Select All</span>
+        </label>
+        ${teams.map(team => `
         <label class="agent-option">
           <input type="checkbox" value="${team.id}" ${state.selectedTeams.includes(team.id) ? "checked" : ""}>
           <span>${escapeHtml(team.name)}</span>
         </label>
-      `).join("") || `<div class="empty">Load Halo agents to show teams.</div>`;
+      `).join("") || `<div class="empty">Load Halo agents to show teams.</div>`}
+      `;
       $("settingsTeamSummary").textContent = summaryText(state.selectedTeams.length, teams.length, "team", "teams");
       picker.querySelectorAll("input").forEach(input => {
-        input.addEventListener("change", selectTeams);
+        input.addEventListener("change", () => selectTeams(input));
       });
     }
 
@@ -246,7 +286,7 @@ const technicians = [
     }
 
     function filteredTechnicians() {
-      if (!state.selectedTeams.length) return [...technicians];
+      if (!state.selectedTeams.length) return [];
       const selectedTeams = new Set(state.selectedTeams.map(String));
       return technicians.filter(tech => {
         const teamIds = Array.isArray(tech.teamIds) && tech.teamIds.length ? tech.teamIds : [tech.teamId];
@@ -262,16 +302,18 @@ const technicians = [
     }
 
     function renderFieldChecks() {
+      $("fieldSummary").textContent = summaryText(state.visibleFields.length, fieldOptions.length, "field", "fields");
       $("fieldChecks").innerHTML = fieldOptions.map(option => `
-        <label>
+        <label class="agent-option">
           <input type="checkbox" value="${option.key}" ${state.visibleFields.includes(option.key) ? "checked" : ""}>
-          ${option.label}
+          <span>${option.label}</span>
         </label>
       `).join("");
       $("fieldChecks").querySelectorAll("input").forEach(input => {
         input.addEventListener("change", () => {
           state.visibleFields = Array.from($("fieldChecks").querySelectorAll("input:checked")).map(item => item.value);
           saveLocalSettings();
+          renderFieldChecks();
           renderReportLists();
           renderPool();
         });
@@ -1066,11 +1108,17 @@ const technicians = [
       renderReportLists();
     }
 
-    function selectTeams() {
-      state.selectedTeams = Array.from($("settingsTeamPicker").querySelectorAll("input:checked")).map(input => input.value);
+    function selectTeams(changedInput) {
+      if (changedInput?.value === "__all") {
+        state.selectedTeams = changedInput.checked ? teams.map(team => team.id) : [];
+      } else {
+        state.selectedTeams = Array.from($("settingsTeamPicker").querySelectorAll("input:checked"))
+          .map(input => input.value)
+          .filter(value => value !== "__all");
+      }
       const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
       state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
-      if (!state.selectedTechs.length) {
+      if (state.selectedTeams.length && !state.selectedTechs.length) {
         state.selectedTechs = Array.from(filteredIds);
       }
       saveLocalSettings();
@@ -1335,13 +1383,10 @@ const technicians = [
 
       const availableTeamIds = new Set(teams.map(team => team.id));
       state.selectedTeams = state.selectedTeams.filter(id => availableTeamIds.has(id));
-      if (!state.selectedTeams.length) {
-        state.selectedTeams = teams.map(team => team.id);
-      }
 
       const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
       state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
-      if (!state.selectedTechs.length) {
+      if (state.selectedTeams.length && !state.selectedTechs.length) {
         state.selectedTechs = Array.from(filteredIds);
       }
       saveLocalSettings();
