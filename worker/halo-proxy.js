@@ -351,6 +351,7 @@ async function handleDateOnlyTaskLoad(payload, env) {
   const tasks = rawTickets
     .map(ticket => normalizeDateOnlyTicket(ticket, date, dateFieldId))
     .filter(Boolean)
+    .filter(task => !task.completed)
     .filter(task => agentIds.includes(String(task.techId)));
 
   return {

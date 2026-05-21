@@ -84,8 +84,12 @@ const technicians = [
     function bindEvents() {
       $("addListBtn").addEventListener("click", addReportList);
       $("ticketPanelToggle").addEventListener("click", () => setTicketPanelOpen(true));
+      $("ticketPanelCollapseBtn").addEventListener("click", () => {
+        state.ticketPanelPinned = false;
+        setTicketPanelOpen(false);
+        saveLocalSettings();
+      });
       $("pinTicketPanelBtn").addEventListener("click", toggleTicketPanelPin);
-      $("pinTicketPanelTabBtn").addEventListener("click", toggleTicketPanelPin);
       $("ticketPanelResizer").addEventListener("pointerdown", startTicketPanelResize);
       $("bottomPoolToggle").addEventListener("click", toggleBottomPoolOpen);
       $("pinBottomPoolBtn").addEventListener("click", toggleBottomPoolPin);
@@ -272,13 +276,9 @@ const technicians = [
       document.body.classList.toggle("ticket-panel-pinned", state.ticketPanelPinned);
       document.documentElement.style.setProperty("--ticket-panel-width", `${state.ticketPanelWidth}px`);
       $("pinTicketPanelBtn").innerHTML = pinIconSvg();
-      $("pinTicketPanelTabBtn").innerHTML = pinIconSvg();
       $("pinTicketPanelBtn").classList.toggle("active", state.ticketPanelPinned);
-      $("pinTicketPanelTabBtn").classList.toggle("active", state.ticketPanelPinned);
       $("pinTicketPanelBtn").title = state.ticketPanelPinned ? "Unpin ticket panel" : "Pin ticket panel";
-      $("pinTicketPanelTabBtn").title = state.ticketPanelPinned ? "Unpin ticket panel" : "Pin ticket panel";
       $("pinTicketPanelBtn").setAttribute("aria-label", state.ticketPanelPinned ? "Unpin ticket panel" : "Pin ticket panel");
-      $("pinTicketPanelTabBtn").setAttribute("aria-label", state.ticketPanelPinned ? "Unpin ticket panel" : "Pin ticket panel");
     }
 
     function pinIconSvg() {
@@ -296,6 +296,7 @@ const technicians = [
       document.documentElement.style.setProperty("--bottom-height", `${height}px`);
       $("bottomPoolToggle").textContent = state.bottomPoolOpen ? "⌄" : "⌃";
       $("pinBottomPoolBtn").innerHTML = pinIconSvg();
+      $("pinBottomPoolBtn").hidden = !state.bottomPoolOpen;
       $("pinBottomPoolBtn").classList.toggle("active", state.bottomPoolPinned);
       $("pinBottomPoolBtn").title = state.bottomPoolPinned ? "Unpin filtered ticket pool" : "Pin filtered ticket pool";
       $("pinBottomPoolBtn").setAttribute("aria-label", state.bottomPoolPinned ? "Unpin filtered ticket pool" : "Pin filtered ticket pool");
@@ -1141,9 +1142,8 @@ const technicians = [
       state.activeTicketId = ticketId;
       const popover = $("ticketPopover");
       const left = Math.min(x, window.innerWidth - 340);
-      const top = Math.min(y, window.innerHeight - 230);
       popover.style.setProperty("--ticket-popover-left", `${Math.max(16, left)}px`);
-      popover.style.setProperty("--ticket-popover-top", `${Math.max(16, top)}px`);
+      popover.style.setProperty("--ticket-popover-top", `${Math.max(16, y)}px`);
       popover.innerHTML = `
         <strong>#${ticket.id} ${escapeHtml(ticket.title)}</strong>
         <span><b>Client:</b> ${escapeHtml(ticket.client)} - ${escapeHtml(ticket.site)}</span>
@@ -1157,6 +1157,9 @@ const technicians = [
         </div>
       `;
       popover.classList.add("open");
+      const rect = popover.getBoundingClientRect();
+      const adjustedTop = Math.min(Math.max(16, y), window.innerHeight - rect.height - 16);
+      popover.style.setProperty("--ticket-popover-top", `${Math.max(16, adjustedTop)}px`);
       $("popoverOpenTicket").addEventListener("click", event => {
         event.stopPropagation();
         openTicketModal(ticketId);
@@ -1490,10 +1493,14 @@ const technicians = [
       state.boardItems = state.boardItems.filter(item => {
         const sameDate = isSelectedDate(item.date);
         const sameTech = visibleTechs.has(String(item.techId));
-        return item.source !== "haloDateOnly" || !sameDate || !sameTech;
+        return (item.source !== "haloDateOnly" && item.kind !== "noTime") || !sameDate || !sameTech;
       });
 
-      tasks.forEach(task => {
+      const seen = new Set();
+      tasks.filter(task => !task.completed).forEach(task => {
+        const key = `${task.ticketId}:${task.techId}:${task.date}`;
+        if (seen.has(key)) return;
+        seen.add(key);
         hydrateTicketFromDateOnlyTask(task);
         state.boardItems.push(task);
       });

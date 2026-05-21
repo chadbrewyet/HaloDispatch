@@ -22,6 +22,11 @@
       --slot-height: 34px;
       --slot-width: 122px;
       --ticket-panel-width: 360px;
+      --ticket-rail-width: 42px;
+      --workspace-band: #e9f0f4;
+      --ticket-band: #fff8df;
+      --pool-band: #eef8f3;
+      --calendar-band: #f7fbfd;
       --radius: 8px;
       font-family: Inter, "Segoe UI", Arial, sans-serif;
     }
@@ -44,6 +49,10 @@
       --appt-border: #5e9fbd;
       --task: #22362d;
       --task-border: #6faf82;
+      --workspace-band: #0f171e;
+      --ticket-band: #201d14;
+      --pool-band: #132018;
+      --calendar-band: #101b22;
     }
 
     * { box-sizing: border-box; }
@@ -194,6 +203,8 @@
       grid-template-columns: minmax(0, 1fr);
       min-height: 0;
       transition: margin-left 0.2s ease;
+      margin-left: var(--ticket-rail-width);
+      background: var(--workspace-band);
     }
 
     body.ticket-panel-pinned .workspace,
@@ -232,24 +243,26 @@
       left: 0;
       top: 58px;
       z-index: 70;
-      min-height: 40px;
-      width: var(--ticket-panel-width);
-      padding: 0 10px;
+      bottom: var(--bottom-height);
+      width: var(--ticket-rail-width);
+      padding: 10px 4px;
       border-radius: 0;
-      display: flex;
+      display: grid;
       gap: 8px;
-      align-items: center;
-      justify-content: space-between;
+      align-content: start;
+      justify-items: center;
       box-shadow: var(--shadow);
-      transform: translateX(calc(-1 * (var(--ticket-panel-width) - 42px)));
       transition: transform 0.2s ease, opacity 0.2s ease;
+      background: var(--panel);
+      border-right: 1px solid var(--line);
     }
 
     .ticket-panel-tab > span:nth-child(2) {
+      writing-mode: vertical-rl;
       text-transform: uppercase;
       font-size: 12px;
       font-weight: 900;
-      margin-right: auto;
+      line-height: 1;
     }
 
     body.ticket-panel-open .ticket-panel-tab,
@@ -261,6 +274,7 @@
     .ticket-panel-badges {
       display: grid;
       gap: 3px;
+      justify-items: center;
     }
 
     .ticket-panel-badges span {
@@ -308,6 +322,7 @@
       display: flex;
       align-items: center;
       gap: 8px;
+      margin-left: auto;
     }
 
     .pin-button svg {
@@ -328,11 +343,11 @@
     .panel-head {
       display: flex;
       align-items: center;
-      justify-content: space-between;
+      justify-content: flex-start;
       gap: 10px;
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
-      background: var(--panel);
+      background: linear-gradient(90deg, var(--ticket-band), var(--panel));
     }
 
     .panel-head h2, .section-title h3 {
@@ -349,6 +364,7 @@
       display: grid;
       grid-auto-rows: minmax(0, 1fr);
       gap: 10px;
+      background: var(--ticket-band);
     }
 
     .report-list {
@@ -573,6 +589,7 @@
     .board-wrap {
       min-height: 0;
       padding: 8px;
+      background: var(--calendar-band);
     }
 
     .board-wrap.horizontal {
@@ -1156,7 +1173,7 @@
     }
 
     body:not(.bottom-pool-open) .bottom-pool {
-      overflow: visible;
+      overflow: hidden;
     }
 
     .pool-resizer {
@@ -1192,6 +1209,7 @@
       min-height: 42px;
       padding: 6px 14px;
       border-bottom: 1px solid var(--line);
+      background: linear-gradient(90deg, var(--pool-band), var(--panel));
     }
 
     .bottom-head h2 {
@@ -1215,7 +1233,7 @@
       grid-auto-columns: minmax(220px, min(270px, 24vw));
       gap: 8px;
       padding: 10px 14px;
-      background: var(--panel-2);
+      background: var(--pool-band);
     }
 
     .config-drawer {
