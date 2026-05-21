@@ -341,7 +341,12 @@ async function handleDateOnlyTaskLoad(payload, env) {
   const params = new URLSearchParams({
     include_custom_fields: String(dateFieldId),
     agent: agentIds.join(","),
-    includecompleted: "true",
+    includeallopen: "true",
+    includecompleted: "false",
+    includeclosed: "false",
+    includestatus: "true",
+    includetickettype: "true",
+    page_size: "500",
     count: "500"
   });
   const haloPath = `/api/Tickets?${params.toString()}`;
@@ -390,14 +395,35 @@ function customFieldValue(ticket, fieldId) {
 }
 
 function isCompletedTicket(ticket) {
+  const flagValues = [
+    ticket.closed,
+    ticket.is_closed,
+    ticket.isclosed,
+    ticket.completed,
+    ticket.is_completed,
+    ticket.iscomplete,
+    ticket.complete
+  ];
+  if (flagValues.some(value => value === true || String(value || "").toLowerCase() === "true" || String(value) === "1")) {
+    return true;
+  }
+
   const values = [
     ticket.status,
+    ticket.status?.name,
+    ticket.status?.text,
+    ticket.status?.label,
     ticket.status_name,
+    ticket.statusname,
     ticket.workflow_name,
     ticket.date_closed,
-    ticket.closed_at
+    ticket.closed_at,
+    ticket.dateclosed,
+    ticket.date_completed,
+    ticket.datecompleted,
+    ticket.completed_at
   ].map(value => String(value || "").toLowerCase());
-  return values.some(value => value.includes("complete") || value.includes("closed") || value === "done");
+  return values.some(value => value.includes("complete") || value.includes("closed") || value === "done" || value === "resolved");
 }
 
 function normalizeAppointment(appointment, date, allowedAgentIds, env) {

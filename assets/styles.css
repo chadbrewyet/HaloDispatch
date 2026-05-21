@@ -1,5 +1,4 @@
 :root {
-      --bottom-height: 172px;
       --bg: #f3f6f8;
       --panel: #ffffff;
       --panel-2: #f8fafb;
@@ -25,7 +24,6 @@
       --ticket-rail-width: 42px;
       --workspace-band: #e9f0f4;
       --ticket-band: #fff8df;
-      --pool-band: #eef8f3;
       --calendar-band: #f7fbfd;
       --radius: 8px;
       font-family: Inter, "Segoe UI", Arial, sans-serif;
@@ -51,7 +49,6 @@
       --task-border: #6faf82;
       --workspace-band: #0f171e;
       --ticket-band: #201d14;
-      --pool-band: #132018;
       --calendar-band: #101b22;
     }
 
@@ -123,7 +120,7 @@
     .app {
       height: 100vh;
       display: grid;
-      grid-template-rows: 58px minmax(0, 1fr) var(--bottom-height);
+      grid-template-rows: 58px minmax(0, 1fr);
     }
 
     .topbar {
@@ -207,8 +204,7 @@
       background: var(--workspace-band);
     }
 
-    body.ticket-panel-pinned .workspace,
-    body.ticket-panel-pinned .bottom-pool {
+    body.ticket-panel-pinned .workspace {
       margin-left: var(--ticket-panel-width);
     }
 
@@ -243,7 +239,7 @@
       left: 0;
       top: 58px;
       z-index: 70;
-      bottom: var(--bottom-height);
+      bottom: 0;
       width: var(--ticket-rail-width);
       padding: 10px 4px;
       border-radius: 0;
@@ -371,11 +367,22 @@
       background: var(--panel);
       border: 1px solid var(--line);
       border-radius: var(--radius);
-      overflow: auto;
+      overflow: hidden;
       min-height: 0;
       max-height: none;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
+    }
+
+    .report-list.collapsed {
+      grid-template-rows: auto;
+      height: auto !important;
+      min-height: 0;
+    }
+
+    .report-list.collapsed .ticket-stack,
+    .report-list.collapsed .report-meta {
+      display: none;
     }
 
     .section-resizer {
@@ -408,7 +415,7 @@
 
     .report-list header {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       gap: 8px;
       padding: 10px;
       border-bottom: 1px solid var(--line);
@@ -439,7 +446,7 @@
       overflow: auto;
     }
 
-    .ticket-stack.list-view, .pool-list.list-view {
+    .ticket-stack.list-view {
       display: grid;
       grid-auto-flow: row;
       grid-template-columns: 1fr;
@@ -1154,86 +1161,6 @@
       color: #b9f2dd;
       border-color: #467763;
       background: #173227;
-    }
-
-    .bottom-pool {
-      border-top: 1px solid var(--line);
-      background: var(--panel);
-      display: grid;
-      grid-template-rows: auto minmax(0, 1fr);
-      min-height: 0;
-      overflow: hidden;
-      position: relative;
-    }
-
-    body:not(.bottom-pool-open) .pool-list,
-    body:not(.bottom-pool-open) .pool-resizer,
-    body:not(.bottom-pool-open) .pool-controls {
-      display: none;
-    }
-
-    body:not(.bottom-pool-open) .bottom-pool {
-      overflow: hidden;
-    }
-
-    .pool-resizer {
-      position: absolute;
-      top: -6px;
-      left: 0;
-      right: 0;
-      height: 12px;
-      z-index: 10;
-      cursor: row-resize;
-      display: grid;
-      place-items: center;
-    }
-
-    .pool-resizer::before {
-      content: "";
-      width: 82px;
-      height: 4px;
-      border-radius: 999px;
-      background: var(--line-strong);
-    }
-
-    .pool-resizer:hover::before,
-    .pool-resizer.active::before {
-      background: var(--accent);
-    }
-
-    .bottom-head {
-      display: grid;
-      grid-template-columns: auto auto auto minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 10px;
-      min-height: 42px;
-      padding: 6px 14px;
-      border-bottom: 1px solid var(--line);
-      background: linear-gradient(90deg, var(--pool-band), var(--panel));
-    }
-
-    .bottom-head h2 {
-      margin: 0;
-      font-size: 14px;
-      text-transform: uppercase;
-    }
-
-    .pool-controls {
-      display: grid;
-      grid-template-columns: minmax(180px, 320px) 150px 150px 118px auto;
-      align-items: center;
-      gap: 10px;
-      min-width: 0;
-    }
-
-    .pool-list {
-      overflow: auto;
-      display: grid;
-      grid-auto-flow: column;
-      grid-auto-columns: minmax(220px, min(270px, 24vw));
-      gap: 8px;
-      padding: 10px 14px;
-      background: var(--pool-band);
     }
 
     .config-drawer {

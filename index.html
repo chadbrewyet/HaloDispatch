@@ -63,36 +63,6 @@
       </section>
     </main>
 
-    <section class="bottom-pool" data-resize-key="pool">
-      <div class="pool-resizer" data-resizer-for="pool" title="Drag to resize ticket pool"></div>
-      <div class="bottom-head">
-        <button class="icon chevron-button" id="bottomPoolToggle" title="Show or hide filtered tickets">⌄</button>
-        <h2>Filtered Ticket Pool</h2>
-        <span class="api-pill" id="poolCountBadge">0 tickets</span>
-        <div class="pool-controls">
-          <input id="poolSearch" type="search" placeholder="Search tickets, clients, summaries">
-          <select id="poolPriority">
-            <option value="">Any Priority</option>
-            <option value="P1">P1</option>
-            <option value="P2">P2</option>
-            <option value="P3">P3</option>
-          </select>
-          <select id="poolType">
-            <option value="">Any Type</option>
-            <option value="Break/Fix">Break/Fix</option>
-            <option value="Project">Project</option>
-            <option value="Maintenance">Maintenance</option>
-          </select>
-          <select id="poolViewSelect" title="Ticket pool view">
-            <option value="card">Cards</option>
-            <option value="list">List</option>
-          </select>
-          <button id="clearFiltersBtn">Clear</button>
-        </div>
-        <button class="icon pin-button" id="pinBottomPoolBtn" title="Pin filtered ticket pool" aria-label="Pin filtered ticket pool"></button>
-      </div>
-      <div class="pool-list" id="poolList"></div>
-    </section>
   </div>
 
   <aside class="config-drawer" id="configDrawer" aria-label="Dispatch board settings">

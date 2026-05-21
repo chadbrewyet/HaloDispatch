@@ -22,13 +22,12 @@ const technicians = [
       show24Hours: false,
       colorBy: "priority",
       theme: "light",
-      listViews: { pool: "card" },
+      listViews: {},
+      collapsedLists: {},
       sectionSizes: {},
       ticketPanelPinned: false,
       ticketPanelOpen: false,
       ticketPanelWidth: 360,
-      bottomPoolPinned: true,
-      bottomPoolOpen: true,
       apiBaseUrl: "https://gagepsa.halopsa.com/ticket?id=",
       apiProxyUrl: "",
       appointmentRefreshMinutes: 5,
@@ -68,7 +67,6 @@ const technicians = [
       renderFieldChecks();
       renderReportLists();
       renderBoard();
-      renderPool();
       applySavedSectionSizes();
       observeResizableSections();
       wireSectionResizers();
@@ -91,8 +89,6 @@ const technicians = [
       });
       $("pinTicketPanelBtn").addEventListener("click", toggleTicketPanelPin);
       $("ticketPanelResizer").addEventListener("pointerdown", startTicketPanelResize);
-      $("bottomPoolToggle").addEventListener("click", toggleBottomPoolOpen);
-      $("pinBottomPoolBtn").addEventListener("click", toggleBottomPoolPin);
       $("prevDay").addEventListener("click", () => shiftDate(-1));
       $("nextDay").addEventListener("click", () => shiftDate(1));
       $("todayBtn").addEventListener("click", () => {
@@ -123,11 +119,6 @@ const technicians = [
         applyTheme();
         saveLocalSettings();
       });
-      $("poolViewSelect").addEventListener("change", () => {
-        state.listViews.pool = $("poolViewSelect").value;
-        saveLocalSettings();
-        renderPool();
-      });
       $("horizontalBtn").addEventListener("click", () => setOrientation("horizontal"));
       $("verticalBtn").addEventListener("click", () => setOrientation("vertical"));
       $("settingsBtn").addEventListener("click", () => $("configDrawer").classList.add("open"));
@@ -141,15 +132,6 @@ const technicians = [
         resetAppointmentRefreshTimer();
       });
       $("refreshBtn").addEventListener("click", refreshReports);
-      $("poolSearch").addEventListener("input", renderPool);
-      $("poolPriority").addEventListener("change", renderPool);
-      $("poolType").addEventListener("change", renderPool);
-      $("clearFiltersBtn").addEventListener("click", () => {
-        $("poolSearch").value = "";
-        $("poolPriority").value = "";
-        $("poolType").value = "";
-        renderPool();
-      });
       $("closeModalBtn").addEventListener("click", closeAppointmentModal);
       $("cancelAppointmentBtn").addEventListener("click", closeAppointmentModal);
       $("saveAppointmentBtn").addEventListener("click", saveAppointment);
@@ -181,13 +163,11 @@ const technicians = [
           $("themeSelect").value = saved.theme;
         }
         if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
+        if (saved.collapsedLists) state.collapsedLists = saved.collapsedLists;
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
         if (saved.ticketPanelPinned !== undefined) state.ticketPanelPinned = Boolean(saved.ticketPanelPinned);
         if (saved.ticketPanelWidth) state.ticketPanelWidth = Number(saved.ticketPanelWidth);
         state.ticketPanelOpen = state.ticketPanelPinned;
-        if (saved.bottomPoolPinned !== undefined) state.bottomPoolPinned = Boolean(saved.bottomPoolPinned);
-        if (saved.bottomPoolOpen !== undefined) state.bottomPoolOpen = Boolean(saved.bottomPoolOpen);
-        if (state.bottomPoolPinned) state.bottomPoolOpen = true;
         if (saved.appointmentRefreshMinutes !== undefined) {
           state.appointmentRefreshMinutes = Number(saved.appointmentRefreshMinutes);
         }
@@ -214,11 +194,10 @@ const technicians = [
         show24Hours: state.show24Hours,
         theme: state.theme,
         listViews: state.listViews,
+        collapsedLists: state.collapsedLists,
         sectionSizes: state.sectionSizes,
         ticketPanelPinned: state.ticketPanelPinned,
         ticketPanelWidth: state.ticketPanelWidth,
-        bottomPoolPinned: state.bottomPoolPinned,
-        bottomPoolOpen: state.bottomPoolOpen,
         apiBaseUrl: state.apiBaseUrl,
         apiProxyUrl: state.apiProxyUrl,
         appointmentRefreshMinutes: state.appointmentRefreshMinutes,
@@ -232,7 +211,6 @@ const technicians = [
     function applyTheme() {
       document.body.dataset.theme = state.theme;
       applyTicketPanelState();
-      applyBottomPoolState();
     }
 
     function wireSettingsAccordion() {
@@ -260,9 +238,6 @@ const technicians = [
       if (state.ticketPanelOpen && !state.ticketPanelPinned && !target.closest(".left-panel") && !target.closest("#ticketPanelToggle")) {
         setTicketPanelOpen(false);
       }
-      if (state.bottomPoolOpen && !state.bottomPoolPinned && !target.closest(".bottom-pool")) {
-        setBottomPoolOpen(false);
-      }
       if ($("zoneModal").classList.contains("open") && !target.closest("#zoneModal") && !target.closest("[data-expand-zone]")) {
         closeZoneModal();
       }
@@ -287,40 +262,6 @@ const technicians = [
           <path d="M8 3h8v2l-1 1v5l3 3v2h-5v5l-1 1-1-1v-5H6v-2l3-3V6L8 5V3Zm3 4v4.8L8.8 14h6.4L13 11.8V7h-2Z" fill="currentColor"/>
         </svg>
       `;
-    }
-
-    function applyBottomPoolState() {
-      document.body.classList.toggle("bottom-pool-open", state.bottomPoolOpen);
-      document.body.classList.toggle("bottom-pool-pinned", state.bottomPoolPinned);
-      const height = state.bottomPoolOpen ? (state.sectionSizes.pool || 172) : 42;
-      document.documentElement.style.setProperty("--bottom-height", `${height}px`);
-      $("bottomPoolToggle").textContent = state.bottomPoolOpen ? "⌄" : "⌃";
-      $("pinBottomPoolBtn").innerHTML = pinIconSvg();
-      $("pinBottomPoolBtn").hidden = !state.bottomPoolOpen;
-      $("pinBottomPoolBtn").classList.toggle("active", state.bottomPoolPinned);
-      $("pinBottomPoolBtn").title = state.bottomPoolPinned ? "Unpin filtered ticket pool" : "Pin filtered ticket pool";
-      $("pinBottomPoolBtn").setAttribute("aria-label", state.bottomPoolPinned ? "Unpin filtered ticket pool" : "Pin filtered ticket pool");
-    }
-
-    function setBottomPoolOpen(open) {
-      state.bottomPoolOpen = open || state.bottomPoolPinned;
-      applyBottomPoolState();
-    }
-
-    function toggleBottomPoolOpen() {
-      if (state.bottomPoolPinned && state.bottomPoolOpen) {
-        state.bottomPoolPinned = false;
-      }
-      state.bottomPoolOpen = !state.bottomPoolOpen;
-      saveLocalSettings();
-      applyBottomPoolState();
-    }
-
-    function toggleBottomPoolPin() {
-      state.bottomPoolPinned = !state.bottomPoolPinned;
-      state.bottomPoolOpen = state.bottomPoolPinned || state.bottomPoolOpen;
-      saveLocalSettings();
-      applyBottomPoolState();
     }
 
     function setTicketPanelOpen(open) {
@@ -464,7 +405,6 @@ const technicians = [
           saveLocalSettings();
           renderFieldChecks();
           renderReportLists();
-          renderPool();
         });
       });
     }
@@ -490,12 +430,22 @@ const technicians = [
       $("reportLists").querySelectorAll("[data-remove-list]").forEach(button => {
         button.addEventListener("click", () => {
           state.reportLists.splice(Number(button.dataset.index), 1);
+          resetReportListHeights();
           renderReportLists();
         });
       });
       $("reportLists").querySelectorAll("[data-list-view]").forEach(select => {
         select.addEventListener("change", () => {
           state.listViews[sectionKey(Number(select.dataset.index))] = select.value;
+          saveLocalSettings();
+          renderReportLists();
+        });
+      });
+      $("reportLists").querySelectorAll("[data-list-toggle]").forEach(toggle => {
+        toggle.addEventListener("click", event => {
+          event.preventDefault();
+          const key = toggle.dataset.listToggle;
+          state.collapsedLists[key] = !state.collapsedLists[key];
           saveLocalSettings();
           renderReportLists();
         });
@@ -519,10 +469,12 @@ const technicians = [
       const key = sectionKey(index);
       const view = state.listViews[key] || "card";
       const canResize = state.reportLists.length > 1;
-      const sizeStyle = canResize && state.sectionSizes[key] ? `style="height:${state.sectionSizes[key]}px"` : "";
+      const collapsed = Boolean(state.collapsedLists[key]);
+      const sizeStyle = canResize && !collapsed && state.sectionSizes[key] ? `style="height:${state.sectionSizes[key]}px"` : "";
       return `
-        <section class="report-list" data-resize-key="${key}" ${sizeStyle}>
+        <section class="report-list ${collapsed ? "collapsed" : ""}" data-resize-key="${key}" ${sizeStyle}>
           <header>
+            <button class="icon chevron-button" data-list-toggle="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">${collapsed ? "⌃" : "⌄"}</button>
             <div class="report-name">${escapeHtml(report.name)}</div>
             <button class="icon" data-remove-list data-index="${index}" title="Remove list">-</button>
             <div class="report-meta">
@@ -538,7 +490,7 @@ const technicians = [
             ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets in this report.</div>`}
           </div>
         </section>
-        ${canResize && index < state.reportLists.length - 1 ? `<div class="section-resizer" data-resizer-for="${key}" title="Drag to resize this ticket list"></div>` : ""}
+        ${canResize && !collapsed && index < state.reportLists.length - 1 ? `<div class="section-resizer" data-resizer-for="${key}" title="Drag to resize this ticket list"></div>` : ""}
       `;
     }
 
@@ -739,32 +691,13 @@ const technicians = [
       `;
     }
 
-    function renderPool() {
-      const search = $("poolSearch").value.trim().toLowerCase();
-      const priority = $("poolPriority").value;
-      const type = $("poolType").value;
-      const view = state.listViews.pool || "card";
-      $("poolViewSelect").value = view;
-      const filtered = tickets.filter(ticket => {
-        const text = `${ticket.id} ${ticket.client} ${ticket.title} ${ticket.site} ${ticket.contact}`.toLowerCase();
-        return (!search || text.includes(search)) && (!priority || ticket.priority === priority) && (!type || ticket.type === type) && shouldShowTicketCard(ticket);
-      });
-      $("poolList").className = `pool-list ${view === "list" ? "list-view" : "card-view"}`;
-      $("poolList").innerHTML = filtered.length ? filtered.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets match the current filters.</div>`;
-      $("poolCountBadge").textContent = `${filtered.length} ${filtered.length === 1 ? "ticket" : "tickets"}`;
-      applySavedSectionSizes();
-      observeResizableSections();
-      wireSectionResizers();
-      makeTicketsDraggable();
-    }
-
     function sectionKey(index) {
       return `report-${index}`;
     }
 
     function applySavedSectionSizes() {
       Object.entries(state.sectionSizes).forEach(([key, height]) => {
-        if (key === "pool" && !state.bottomPoolOpen) return;
+        if (key === "pool") return;
         setSectionHeight(key, height);
       });
     }
@@ -776,12 +709,10 @@ const technicians = [
         for (const entry of entries) {
           const key = entry.target.dataset.resizeKey;
           if (!key) continue;
+          if (key === "pool") continue;
           const height = Math.round(entry.contentRect.height);
           if (height < 80) continue;
           state.sectionSizes[key] = height;
-          if (key === "pool" && state.bottomPoolOpen) {
-            document.documentElement.style.setProperty("--bottom-height", `${height}px`);
-          }
         }
         clearTimeout(state.resizeSaveTimer);
         state.resizeSaveTimer = setTimeout(saveLocalSettings, 250);
@@ -800,16 +731,16 @@ const technicians = [
 
     function startSectionResize(handle, startY) {
       const key = handle.dataset.resizerFor;
+      if (key === "pool") return;
       const section = document.querySelector(`[data-resize-key="${key}"]`);
       if (!section) return;
-      const startHeight = key === "pool" ? section.getBoundingClientRect().height : section.offsetHeight;
-      const resizingPool = key === "pool";
+      const startHeight = section.offsetHeight;
       handle.classList.add("active");
 
       function onMove(event) {
-        const delta = resizingPool ? startY - event.clientY : event.clientY - startY;
-        const min = resizingPool ? 120 : 172;
-        const max = resizingPool ? Math.round(window.innerHeight * 0.45) : Math.round(window.innerHeight * 0.7);
+        const delta = event.clientY - startY;
+        const min = 42;
+        const max = Math.round(window.innerHeight * 0.7);
         const nextHeight = Math.max(min, Math.min(max, Math.round(startHeight + delta)));
         setSectionHeight(key, nextHeight);
       }
@@ -826,10 +757,8 @@ const technicians = [
     }
 
     function setSectionHeight(key, height) {
+      if (key === "pool") return;
       state.sectionSizes[key] = height;
-      if (key === "pool") {
-        if (state.bottomPoolOpen) document.documentElement.style.setProperty("--bottom-height", `${height}px`);
-      }
       document.querySelectorAll(`[data-resize-key="${key}"]`).forEach(section => {
         section.style.height = `${height}px`;
       });
@@ -1263,13 +1192,21 @@ const technicians = [
         toast("No ticket views configured", "Ticket views will become configurable in the next filter pass.");
         return;
       }
-      if (state.reportLists.length >= 3) {
-        toast("List limit reached", "You can show up to 3 ticket lists.");
+      if (state.reportLists.length >= 5) {
+        toast("List limit reached", "You can show up to 5 ticket lists.");
         return;
       }
       const next = reports.find(report => !state.reportLists.includes(report.id)) || reports[0];
       state.reportLists.push(next.id);
+      resetReportListHeights();
       renderReportLists();
+    }
+
+    function resetReportListHeights() {
+      Object.keys(state.sectionSizes).forEach(key => {
+        if (key.startsWith("report-")) delete state.sectionSizes[key];
+      });
+      saveLocalSettings();
     }
 
     function selectTeams(changedInput) {
@@ -1372,7 +1309,6 @@ const technicians = [
       if (!result?.ok) return;
       syncHaloTickets(result.data?.tickets || []);
       renderReportLists();
-      renderPool();
       if (!options.quiet) {
         toast("Tickets loaded", `${result.data?.tickets?.length || 0} open tickets matched the current type filter.`);
       }
@@ -1733,7 +1669,6 @@ const technicians = [
       closeTicketPopover();
       renderReportLists();
       renderBoard();
-      renderPool();
     }
 
     function removeBoardItem(ticketId) {
