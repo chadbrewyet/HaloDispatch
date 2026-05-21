@@ -32,11 +32,20 @@
       </div>
     </header>
 
+    <button class="ticket-panel-tab" id="ticketPanelToggle" title="Show service tickets">
+      <span>Tickets</span>
+      <span class="ticket-panel-badges" id="ticketPanelBadges"></span>
+    </button>
+
     <main class="workspace">
       <aside class="left-panel">
+        <div class="side-resizer" id="ticketPanelResizer" title="Drag to resize ticket panel"></div>
         <div class="panel-head">
           <h2>Service Tickets</h2>
-          <button id="addListBtn">Add List</button>
+          <div class="panel-actions">
+            <button class="icon" id="pinTicketPanelBtn" title="Pin ticket panel">v</button>
+            <button id="addListBtn">Add List</button>
+          </div>
         </div>
         <div class="report-lists" id="reportLists"></div>
       </aside>

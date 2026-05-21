@@ -20,6 +20,9 @@ const technicians = [
       theme: "light",
       listViews: { pool: "card" },
       sectionSizes: {},
+      ticketPanelPinned: false,
+      ticketPanelOpen: false,
+      ticketPanelWidth: 360,
       apiBaseUrl: "https://gagepsa.halopsa.com/ticket?id=",
       apiProxyUrl: "",
       appointmentRefreshMinutes: 5,
@@ -71,6 +74,9 @@ const technicians = [
 
     function bindEvents() {
       $("addListBtn").addEventListener("click", addReportList);
+      $("ticketPanelToggle").addEventListener("click", () => setTicketPanelOpen(true));
+      $("pinTicketPanelBtn").addEventListener("click", toggleTicketPanelPin);
+      $("ticketPanelResizer").addEventListener("pointerdown", startTicketPanelResize);
       $("prevDay").addEventListener("click", () => shiftDate(-1));
       $("nextDay").addEventListener("click", () => shiftDate(1));
       $("todayBtn").addEventListener("click", () => {
@@ -160,6 +166,9 @@ const technicians = [
         }
         if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
+        if (saved.ticketPanelPinned !== undefined) state.ticketPanelPinned = Boolean(saved.ticketPanelPinned);
+        if (saved.ticketPanelWidth) state.ticketPanelWidth = Number(saved.ticketPanelWidth);
+        state.ticketPanelOpen = state.ticketPanelPinned;
         if (saved.appointmentRefreshMinutes !== undefined) {
           state.appointmentRefreshMinutes = Number(saved.appointmentRefreshMinutes);
         }
@@ -186,6 +195,8 @@ const technicians = [
         theme: state.theme,
         listViews: state.listViews,
         sectionSizes: state.sectionSizes,
+        ticketPanelPinned: state.ticketPanelPinned,
+        ticketPanelWidth: state.ticketPanelWidth,
         apiBaseUrl: state.apiBaseUrl,
         apiProxyUrl: state.apiProxyUrl,
         appointmentRefreshMinutes: state.appointmentRefreshMinutes,
@@ -197,6 +208,7 @@ const technicians = [
 
     function applyTheme() {
       document.body.dataset.theme = state.theme;
+      applyTicketPanelState();
     }
 
     function wireSettingsAccordion() {
@@ -221,12 +233,56 @@ const technicians = [
       if ($("configDrawer").classList.contains("open") && !target.closest("#configDrawer") && !target.closest("#settingsBtn")) {
         $("configDrawer").classList.remove("open");
       }
+      if (state.ticketPanelOpen && !state.ticketPanelPinned && !target.closest(".left-panel") && !target.closest("#ticketPanelToggle")) {
+        setTicketPanelOpen(false);
+      }
       if ($("zoneModal").classList.contains("open") && !target.closest("#zoneModal") && !target.closest("[data-expand-zone]")) {
         closeZoneModal();
       }
       document.querySelectorAll(".multi-dropdown[open]").forEach(dropdown => {
         if (!dropdown.contains(target)) dropdown.open = false;
       });
+    }
+
+    function applyTicketPanelState() {
+      document.body.classList.toggle("ticket-panel-open", state.ticketPanelOpen);
+      document.body.classList.toggle("ticket-panel-pinned", state.ticketPanelPinned);
+      document.documentElement.style.setProperty("--ticket-panel-width", `${state.ticketPanelWidth}px`);
+      $("pinTicketPanelBtn").textContent = state.ticketPanelPinned ? "^" : "v";
+      $("pinTicketPanelBtn").title = state.ticketPanelPinned ? "Unpin ticket panel" : "Pin ticket panel";
+    }
+
+    function setTicketPanelOpen(open) {
+      state.ticketPanelOpen = open || state.ticketPanelPinned;
+      applyTicketPanelState();
+    }
+
+    function toggleTicketPanelPin() {
+      state.ticketPanelPinned = !state.ticketPanelPinned;
+      state.ticketPanelOpen = state.ticketPanelPinned || state.ticketPanelOpen;
+      saveLocalSettings();
+      applyTicketPanelState();
+    }
+
+    function startTicketPanelResize(event) {
+      if (!state.ticketPanelPinned) return;
+      event.preventDefault();
+      const startX = event.clientX;
+      const startWidth = state.ticketPanelWidth;
+      const handle = $("ticketPanelResizer");
+      handle.classList.add("active");
+      const onMove = moveEvent => {
+        state.ticketPanelWidth = Math.max(280, Math.min(620, startWidth + (moveEvent.clientX - startX)));
+        applyTicketPanelState();
+      };
+      const onUp = () => {
+        handle.classList.remove("active");
+        saveLocalSettings();
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", onUp);
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", onUp);
     }
 
     function renderTeamSelect() {
@@ -323,9 +379,15 @@ const technicians = [
     function renderReportLists() {
       if (!reports.length) {
         $("reportLists").innerHTML = `<div class="empty">No Halo report lists configured yet.</div>`;
+        updateTicketPanelBadges([]);
         return;
       }
+      const counts = state.reportLists.map(reportId => {
+        const report = reports.find(item => item.id === reportId) || reports[0];
+        return tickets.filter(ticket => ticket.report === report.id && shouldShowTicketCard(ticket)).length;
+      });
       $("reportLists").innerHTML = state.reportLists.map((reportId, index) => renderReportList(reportId, index)).join("");
+      updateTicketPanelBadges(counts);
       $("reportLists").querySelectorAll("[data-report-select]").forEach(select => {
         select.addEventListener("change", () => {
           state.reportLists[Number(select.dataset.index)] = select.value;
@@ -348,6 +410,13 @@ const technicians = [
       observeResizableSections();
       wireSectionResizers();
       makeTicketsDraggable();
+    }
+
+    function updateTicketPanelBadges(counts) {
+      const safeCounts = counts.length ? counts : [0];
+      $("ticketPanelBadges").innerHTML = safeCounts.slice(0, 3).map((count, index) => `
+        <span title="List ${index + 1}: ${count} tickets">${count}</span>
+      `).join("");
     }
 
     function renderReportList(reportId, index) {
