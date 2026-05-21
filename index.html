@@ -24,6 +24,10 @@
         <button id="refreshBtn" class="primary compact-action">Refresh Reports</button>
       </div>
       <div class="view-controls">
+        <label class="toggle-field header-toggle">
+          <input id="show24HoursCheck" type="checkbox">
+          <span>Show 24 hours</span>
+        </label>
         <div class="segmented" aria-label="Board orientation">
           <button id="horizontalBtn" class="active">Horizontal</button>
           <button id="verticalBtn">Vertical</button>
@@ -51,12 +55,6 @@
       </aside>
 
       <section class="main-panel">
-        <div class="filters">
-          <label class="toggle-field">
-            <input id="show24HoursCheck" type="checkbox">
-            <span>Show 24 hours</span>
-          </label>
-        </div>
         <div class="board-wrap">
           <div class="board horizontal" id="dispatchBoard"></div>
         </div>
@@ -96,7 +94,7 @@
       <button class="icon" id="closeSettingsBtn" title="Close settings">x</button>
     </div>
     <div class="drawer-body">
-      <details class="settings-card" open>
+      <details class="settings-card accordion-section" open>
         <summary><h3>Appearance</h3></summary>
         <div class="field">
           <label>Theme</label>
@@ -121,7 +119,7 @@
           </details>
         </div>
       </details>
-      <details class="settings-card">
+      <details class="settings-card accordion-section">
         <summary><h3>Teams & Agents</h3></summary>
         <div class="field">
           <label>Teams</label>
@@ -138,7 +136,7 @@
           </details>
         </div>
       </details>
-      <details class="settings-card">
+      <details class="settings-card accordion-section">
         <summary><h3>Connection</h3></summary>
         <div class="field">
           <label>Worker API URL</label>

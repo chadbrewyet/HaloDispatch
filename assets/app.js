@@ -212,10 +212,10 @@ const technicians = [
     }
 
     function wireSettingsAccordion() {
-      document.querySelectorAll(".drawer-body > .settings-card").forEach(section => {
+      document.querySelectorAll(".drawer-body > .accordion-section").forEach(section => {
         section.addEventListener("toggle", () => {
           if (!section.open) return;
-          document.querySelectorAll(".drawer-body > .settings-card").forEach(other => {
+          document.querySelectorAll(".drawer-body > .accordion-section").forEach(other => {
             if (other !== section) other.open = false;
           });
         });
@@ -484,13 +484,11 @@ const technicians = [
       const allDay = visibleItems.filter(item => item.kind === "allDay");
       const noTime = visibleItems.filter(item => item.kind === "noTime");
       const timed = visibleItems.filter(item => item.kind === "timed");
-      const load = allDay.length + noTime.length + timed.length;
       if (state.orientation === "vertical") {
         return `
           <section class="tech-column" data-tech-id="${tech.id}">
             <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
               <div class="tech-name">${escapeHtml(tech.name)}</div>
-              <div class="tech-load">${load} assigned</div>
             </header>
             <div class="vertical-task-stack">
               ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
@@ -507,7 +505,6 @@ const technicians = [
         <section class="tech-column" data-tech-id="${tech.id}">
           <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
             <div class="tech-name">${escapeHtml(tech.name)}</div>
-            <div class="tech-load">${load} assigned</div>
           </header>
           ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
           <div class="calendar" data-calendar-tech-id="${tech.id}">
