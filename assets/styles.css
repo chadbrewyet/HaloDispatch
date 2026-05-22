@@ -534,7 +534,7 @@
     }
 
     .filter-modal {
-      width: min(860px, calc(100vw - 56px));
+      width: min(1040px, calc(100vw - 40px));
       overflow: visible;
     }
 
@@ -604,7 +604,7 @@
 
     .filter-condition-row {
       display: grid;
-      grid-template-columns: 74px 92px 170px minmax(0, 1fr) auto auto;
+      grid-template-columns: 62px 76px 160px minmax(300px, 1fr) 34px 34px;
       gap: 8px;
       align-items: start;
       padding: 8px;
@@ -614,8 +614,20 @@
     }
 
     .filter-mode-toggle {
-      font-size: 12px;
+      min-height: 34px;
+      padding: 0 6px;
+      font-size: 11px;
       font-weight: 900;
+    }
+
+    .filter-condition-row > .icon {
+      width: 34px;
+      align-self: start;
+    }
+
+    .filter-condition-row select,
+    .filter-condition-row .condition-value-picker {
+      min-width: 0;
     }
 
     .condition-joiner-spacer {
@@ -631,6 +643,9 @@
     .condition-value-picker summary {
       min-height: 34px;
       padding: 9px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .condition-value-picker {
@@ -644,14 +659,25 @@
       left: 50%;
       right: auto;
       transform: translateX(-50%);
-      width: min(380px, calc(100vw - 56px));
-      max-height: min(280px, 42vh);
+      width: min(460px, calc(100vw - 56px));
+      max-height: min(300px, 46vh);
       overflow: auto;
       border: 1px solid var(--line-strong);
       border-radius: 6px;
       background: var(--panel);
       box-shadow: var(--shadow);
       padding: 8px;
+    }
+
+    .condition-value-picker[open] .agent-option {
+      flex-wrap: nowrap;
+      white-space: nowrap;
+    }
+
+    .condition-value-picker[open] .agent-option span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .ticket-stack {

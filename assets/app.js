@@ -1016,7 +1016,11 @@ const technicians = [
       if (field === "team") {
         const tech = technicians.find(item => String(item.id) === String(ticket.assignedTo));
         const teamIds = ticket.teamIds?.length ? ticket.teamIds : (tech?.teamIds?.length ? tech.teamIds : [ticket.teamId || tech?.teamId || ""]);
-        return teamIds.map(String).filter(Boolean);
+        return Array.from(new Set([
+          ticket.teamId,
+          ticket.team,
+          ...teamIds
+        ].map(value => String(value || "").trim()).filter(Boolean)));
       }
       return [ticket[field] || ""];
     }
@@ -1033,7 +1037,7 @@ const technicians = [
           const teamIds = Array.isArray(item.teamIds) ? item.teamIds : [item.teamId];
           return teamIds.map(String).includes(String(value));
         });
-        return tech?.team || (value ? `Team ${value}` : "No Team");
+        return tech?.team || (value ? String(value) : "No Team");
       }
       return value;
     }
@@ -1933,6 +1937,14 @@ const technicians = [
     function normalizeHaloTicket(ticket) {
       const id = Number(ticket.id || ticket.ticketId || ticket.haloTicketId);
       if (!id) return null;
+      const assignedTech = technicians.find(tech => String(tech.id) === String(ticket.assignedTo));
+      const apiTeamId = ticket.teamId || ticket.team_id || ticket.teamid || "";
+      const apiTeamName = ticket.team || ticket.teamName || ticket.team_name || "";
+      const fallbackTeamIds = [
+        apiTeamId,
+        ...(assignedTech?.teamIds || []),
+        assignedTech?.teamId || ""
+      ].map(String).filter(Boolean);
       return {
         id,
         client: ticket.client || "",
@@ -1940,8 +1952,9 @@ const technicians = [
         priority: ticket.priority || "",
         status: ticket.status || "",
         type: ticket.type || "",
-        teamId: ticket.teamId || technicians.find(tech => String(tech.id) === String(ticket.assignedTo))?.teamId || "",
-        teamIds: Array.isArray(ticket.teamIds) ? ticket.teamIds.map(String) : (technicians.find(tech => String(tech.id) === String(ticket.assignedTo))?.teamIds || []),
+        team: apiTeamName || assignedTech?.team || "",
+        teamId: apiTeamId || assignedTech?.teamId || "",
+        teamIds: Array.isArray(ticket.teamIds) ? ticket.teamIds.map(String) : Array.from(new Set(fallbackTeamIds)),
         serviceZone: ticket.serviceZone || "",
         report: "api-open",
         site: ticket.site || "",

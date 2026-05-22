@@ -252,6 +252,14 @@ function normalizeTicket(ticket, env) {
   if (!id) return null;
   const typeId = ticket.requesttype_id ?? ticket.tickettype_id ?? ticket.type_id ?? ticket.requesttypeid;
   const typeName = stripHtml(ticket.requesttype_name || ticket.requesttype || ticket.request_type || ticket.tickettype_name || ticket.tickettype || ticket.ticket_type || ticket.type || "");
+  const rawTeam = ticket.team;
+  const rawTeamId = typeof rawTeam === "number" || (typeof rawTeam === "string" && /^\d+$/.test(rawTeam)) ? rawTeam : undefined;
+  const teamId = ticket.team_id ?? ticket.teamid ?? ticket.teamId ?? ticket.team?.id ?? rawTeamId;
+  const teamName = ticket.team_name
+    || ticket.teamname
+    || ticket.teamName
+    || ticket.team?.name
+    || (typeof rawTeam === "string" && !/^\d+$/.test(rawTeam) ? rawTeam : "");
   const customDate = customFieldValue(ticket, env.HALO_DISPATCH_DATE_FIELD_ID || "486");
   const serviceZone = customFieldValue(ticket, "Service Zone");
   return {
@@ -263,6 +271,8 @@ function normalizeTicket(ticket, env) {
     status: stripHtml(ticket.status_name || ticket.statusname || ticket.status?.name || ticket.status || ""),
     type: typeName,
     typeId: typeId ? String(typeId) : "",
+    team: stripHtml(teamName || ""),
+    teamId: teamId ? String(teamId) : "",
     site: stripHtml(ticket.site_name || ticket.sitename || ticket.site || ""),
     sla: stripHtml(ticket.sla || ticket.sla_name || ticket.slastate || ""),
     estimate: ticket.estimatedays || ticket.estimate || "",
