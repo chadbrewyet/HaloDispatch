@@ -161,9 +161,6 @@ const technicians = [
       $("cancelAppointmentBtn").addEventListener("click", closeAppointmentModal);
       $("saveAppointmentBtn").addEventListener("click", saveAppointment);
       $("zoneModalClose").addEventListener("click", closeZoneModal);
-      $("closeTicketModalBtn").addEventListener("click", closeTicketModal);
-      $("ticketModalDoneBtn").addEventListener("click", closeTicketModal);
-      $("ticketExternalBtn").addEventListener("click", openTicketExternal);
       $("closeFilterModalBtn").addEventListener("click", closeFilterModal);
       $("filterModalCancelBtn").addEventListener("click", closeFilterModal);
       $("filterModalApplyBtn").addEventListener("click", applyFilterModal);
@@ -283,9 +280,6 @@ const technicians = [
       const clickedInTicketFilter = path.some(node => node?.classList?.contains("ticket-filter-menu")) || Boolean(target.closest(".ticket-filter-menu"));
       if ($("appointmentModal").classList.contains("open") && target === $("appointmentModal")) {
         closeAppointmentModal();
-      }
-      if ($("ticketModal").classList.contains("open") && target === $("ticketModal")) {
-        closeTicketModal();
       }
       if ($("filterModal").classList.contains("open") && target === $("filterModal")) {
         closeFilterModal();
@@ -664,7 +658,7 @@ const technicians = [
         const activeConditions = filterConditions(filter).filter(condition => condition.values?.length);
         if (!activeConditions.length) return true;
         return activeConditions.reduce((matches, condition, index) => {
-          const hasValue = condition.values.includes(String(ticketFilterValue(ticket, condition.field)));
+          const hasValue = ticketFilterValues(ticket, condition.field).some(value => condition.values.includes(String(value)));
           const conditionMatches = condition.mode === "exclude" ? !hasValue : hasValue;
           if (index === 0) return conditionMatches;
           return condition.joiner === "or" ? matches || conditionMatches : matches && conditionMatches;
@@ -997,7 +991,7 @@ const technicians = [
     }
 
     function uniqueTicketValues(field) {
-      const values = tickets.map(ticket => String(ticketFilterValue(ticket, field) || "").trim()).filter(Boolean);
+      const values = tickets.flatMap(ticket => ticketFilterValues(ticket, field).map(value => String(value || "").trim()).filter(Boolean));
       if (field === "type") {
         values.push(...ticketTypes.map(type => type.name).filter(Boolean));
       }
@@ -1005,17 +999,26 @@ const technicians = [
         values.push("1", ...technicians.map(tech => String(tech.id)));
       }
       if (field === "team") {
-        values.push(...teams.map(team => String(team.id)));
+        values.push(
+          ...teams.map(team => String(team.id)),
+          ...technicians.flatMap(tech => (Array.isArray(tech.teamIds) ? tech.teamIds : [tech.teamId]).map(String).filter(Boolean))
+        );
       }
       return Array.from(new Set(values)).sort((a, b) => filterValueLabel(field, a).localeCompare(filterValueLabel(field, b)));
     }
 
     function ticketFilterValue(ticket, field) {
-      if (field === "assignedTo") return ticket.assignedTo || "";
+      return ticketFilterValues(ticket, field)[0] || "";
+    }
+
+    function ticketFilterValues(ticket, field) {
+      if (field === "assignedTo") return [ticket.assignedTo || ""];
       if (field === "team") {
-        return ticket.teamId || technicians.find(tech => String(tech.id) === String(ticket.assignedTo))?.teamId || "";
+        const tech = technicians.find(item => String(item.id) === String(ticket.assignedTo));
+        const teamIds = ticket.teamIds?.length ? ticket.teamIds : (tech?.teamIds?.length ? tech.teamIds : [ticket.teamId || tech?.teamId || ""]);
+        return teamIds.map(String).filter(Boolean);
       }
-      return ticket[field] || "";
+      return [ticket[field] || ""];
     }
 
     function filterValueLabel(field, value) {
@@ -1024,7 +1027,13 @@ const technicians = [
         return technicians.find(tech => String(tech.id) === String(value))?.name || (value ? `Agent ${value}` : "Unassigned");
       }
       if (field === "team") {
-        return teams.find(team => String(team.id) === String(value))?.name || (value ? `Team ${value}` : "No Team");
+        const team = teams.find(item => String(item.id) === String(value));
+        if (team?.name) return team.name;
+        const tech = technicians.find(item => {
+          const teamIds = Array.isArray(item.teamIds) ? item.teamIds : [item.teamId];
+          return teamIds.map(String).includes(String(value));
+        });
+        return tech?.team || (value ? `Team ${value}` : "No Team");
       }
       return value;
     }
@@ -1268,7 +1277,6 @@ const technicians = [
       if (position === null) return "";
       return `
         <div class="current-time-marker ${state.orientation}" style="--now-position:${position}%">
-          <span>${escapeHtml(formatTime(currentTimeString()))}</span>
         </div>
       `;
     }
@@ -1502,7 +1510,7 @@ const technicians = [
         card.addEventListener("dblclick", event => {
           event.preventDefault();
           event.stopPropagation();
-          openTicketModal(Number(card.dataset.ticketId));
+          openTicketExternal(Number(card.dataset.ticketId));
         });
       });
     }
@@ -1718,7 +1726,7 @@ const technicians = [
       popover.style.setProperty("--ticket-popover-top", `${Math.max(16, adjustedTop)}px`);
       $("popoverOpenTicket").addEventListener("click", event => {
         event.stopPropagation();
-        openTicketModal(ticketId);
+        openTicketExternal(ticketId);
       });
     }
 
@@ -1726,47 +1734,11 @@ const technicians = [
       $("ticketPopover").classList.remove("open");
     }
 
-    function openTicketModal(ticketId) {
+    function openTicketExternal(ticketId = state.activeTicketId) {
       const ticket = tickets.find(item => item.id === ticketId);
       if (!ticket) return;
       closeTicketPopover();
       state.activeTicketId = ticketId;
-      const assignedTech = technicians.find(tech => tech.id === ticket.assignedTo)?.name || "Unassigned";
-      $("ticketModalTitle").textContent = `Ticket #${ticket.id}`;
-      $("ticketModalBody").innerHTML = `
-        <div class="ticket-summary">
-          <h3>${escapeHtml(ticket.title)}</h3>
-          <p style="margin:0;color:var(--muted);line-height:1.45;">${escapeHtml(ticket.details)}</p>
-          <div class="detail-grid">
-            ${detailBox("Client", ticket.client)}
-            ${detailBox("Site", ticket.site)}
-            ${detailBox("Contact", ticket.contact)}
-            ${detailBox("Priority", ticket.priority)}
-            ${detailBox("SLA", ticket.sla)}
-            ${detailBox("Estimate", ticket.estimate)}
-            ${detailBox("Type", ticket.type)}
-            ${detailBox("Assigned Tech", assignedTech)}
-            ${detailBox("Board Date", ticket.dateField || "Unscheduled")}
-            ${detailBox("Report", reports.find(report => report.id === ticket.report)?.name || ticket.report)}
-          </div>
-        </div>
-        <aside class="settings-card" style="align-content:start;">
-          <h3>HaloPSA Link</h3>
-          <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.45;">This will use the full ticket URL once provided after testing.</p>
-          <div class="empty" style="text-align:left;">${escapeHtml(ticketUrl(ticket))}</div>
-          <button type="button" onclick="openTicketExternal()">Open HaloPSA URL</button>
-        </aside>
-      `;
-      $("ticketModal").classList.add("open");
-    }
-
-    function closeTicketModal() {
-      $("ticketModal").classList.remove("open");
-    }
-
-    function openTicketExternal() {
-      const ticket = tickets.find(item => item.id === state.activeTicketId);
-      if (!ticket) return;
       const url = ticketUrl(ticket);
       if (url.startsWith("http")) {
         window.open(url, "_blank", "noopener");
@@ -1781,10 +1753,6 @@ const technicians = [
         return `${state.apiBaseUrl}${ticket.id}`;
       }
       return `${state.apiBaseUrl.replace(/\/$/, "")}/ticket?id=${ticket.id}`;
-    }
-
-    function detailBox(label, value) {
-      return `<div class="detail-box"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "-")}</strong></div>`;
     }
 
     function saveAppointment() {
@@ -1973,6 +1941,7 @@ const technicians = [
         status: ticket.status || "",
         type: ticket.type || "",
         teamId: ticket.teamId || technicians.find(tech => String(tech.id) === String(ticket.assignedTo))?.teamId || "",
+        teamIds: Array.isArray(ticket.teamIds) ? ticket.teamIds.map(String) : (technicians.find(tech => String(tech.id) === String(ticket.assignedTo))?.teamIds || []),
         serviceZone: ticket.serviceZone || "",
         report: "api-open",
         site: ticket.site || "",
@@ -2152,18 +2121,18 @@ const technicians = [
       const matchedTechnicians = agents
         .map(agent => {
           const memberships = Array.isArray(agent.teams) ? agent.teams : [];
-          const matchingTeams = memberships.filter(team => {
-            return String(team.team_id ?? team.id ?? "") && isTrue(team.in_section);
-          });
-          if (!matchingTeams.length) return null;
-
-          matchingTeams.forEach(team => {
+          memberships.forEach(team => {
             const teamId = String(team.team_id ?? team.id ?? "");
+            if (!teamId) return;
             teamMap.set(teamId, {
               id: teamId,
               name: team.name || team.team || team.team_name || (String(agent.team_id) === teamId ? agent.team : "") || `Team ${teamId}`
             });
           });
+          const matchingTeams = memberships.filter(team => {
+            return String(team.team_id ?? team.id ?? "") && isTrue(team.in_section);
+          });
+          if (!matchingTeams.length) return null;
 
           const primaryTeam = matchingTeams[0];
           const primaryTeamId = String(primaryTeam.team_id ?? primaryTeam.id ?? "");

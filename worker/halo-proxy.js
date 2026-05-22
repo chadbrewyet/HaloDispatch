@@ -506,6 +506,14 @@ async function handleTechnicianLoad(payload, env) {
     .filter(agent => !technicianIds.size || technicianIds.has(String(agent.id)))
     .map(agent => {
       const memberships = Array.isArray(agent.teams) ? agent.teams : [];
+      memberships.forEach(team => {
+        const teamId = String(team.team_id ?? team.id ?? "");
+        if (!teamId) return;
+        teamMap.set(teamId, {
+          id: teamId,
+          name: team.name || team.team || team.team_name || (String(agent.team_id) === teamId ? agent.team : "") || `Team ${teamId}`
+        });
+      });
       const matchingTeams = memberships.filter(team => {
         const teamId = String(team.team_id ?? team.id ?? "");
         return (!teamIds.size || teamIds.has(teamId)) && isTrue(team.in_section);
@@ -513,14 +521,6 @@ async function handleTechnicianLoad(payload, env) {
       if (!matchingTeams.length) return null;
 
       const primaryTeam = matchingTeams[0];
-      matchingTeams.forEach(team => {
-        const teamId = String(team.team_id ?? team.id ?? "");
-        teamMap.set(teamId, {
-          id: teamId,
-          name: team.name || team.team || team.team_name || (String(agent.team_id) === teamId ? agent.team : "") || `Team ${teamId}`
-        });
-      });
-
       const primaryTeamId = String(primaryTeam.team_id ?? primaryTeam.id ?? "");
       return {
         id: String(agent.id),
