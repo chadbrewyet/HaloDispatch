@@ -295,12 +295,16 @@
     .ticket-panel-badges span {
       min-width: 22px;
       border-radius: 999px;
-      background: var(--accent);
+      background: hsl(var(--list-hue, 198) var(--list-sat, 72%) 38%);
       color: #fff;
       padding: 2px 4px;
       font-size: 10px;
       font-weight: 900;
       text-align: center;
+    }
+
+    body:not(.ticket-panel-open):not(.ticket-panel-pinned) .ticket-panel-badges span.has-count {
+      animation: listBadgePulse 1.8s ease-in-out infinite;
     }
 
     .side-resizer {
@@ -942,6 +946,28 @@
       white-space: nowrap;
     }
 
+    .tech-title {
+      min-width: 0;
+      display: grid;
+      justify-items: center;
+      gap: 3px;
+    }
+
+    .tech-load-badge {
+      max-width: 100%;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      border-radius: 999px;
+      padding: 2px 7px;
+      background: rgba(255, 255, 255, 0.12);
+      color: rgba(255, 255, 255, 0.94);
+      font-size: 10px;
+      font-weight: 900;
+      line-height: 1.2;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
     .tech-edit-btn {
       width: 28px;
       min-height: 28px;
@@ -972,6 +998,31 @@
       font-weight: 900;
       text-transform: uppercase;
       color: var(--muted);
+    }
+
+    .tech-group-toggle > span:first-child {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .section-count-badge {
+      min-width: 20px;
+      height: 20px;
+      padding: 0 6px;
+      border-radius: 999px;
+      display: inline-grid;
+      place-items: center;
+      background: color-mix(in srgb, var(--tech-color, var(--accent)) 78%, #fff);
+      color: #fff;
+      font-size: 10px;
+      font-weight: 900;
+    }
+
+    .section-count-badge.alert {
+      background: var(--danger);
+      animation: alertBadgePulse 1.4s ease-in-out infinite;
     }
 
     .calendar-collapsed-note {
@@ -1114,6 +1165,26 @@
       outline: 2px solid var(--accent);
       outline-offset: -3px;
       background: #eef8fc;
+    }
+
+    @keyframes alertBadgePulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 rgba(189, 77, 63, 0.35);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 0 0 5px rgba(189, 77, 63, 0);
+        transform: scale(1.05);
+      }
+    }
+
+    @keyframes listBadgePulse {
+      0%, 100% {
+        box-shadow: 0 0 0 0 hsl(var(--list-hue, 198) var(--list-sat, 72%) 42% / 0.36);
+      }
+      50% {
+        box-shadow: 0 0 0 5px hsl(var(--list-hue, 198) var(--list-sat, 72%) 42% / 0);
+      }
     }
 
     .zone-label {

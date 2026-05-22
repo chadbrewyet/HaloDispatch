@@ -721,7 +721,7 @@ const technicians = [
     function updateTicketPanelBadges(counts) {
       const safeCounts = counts.length ? counts : [0];
       $("ticketPanelBadges").innerHTML = safeCounts.slice(0, 3).map((count, index) => `
-        <span title="List ${index + 1}: ${count} tickets">${count}</span>
+        <span class="${count > 0 ? "has-count" : ""}" ${listThemeStyle(state.listFilters[sectionKey(index)]?.color)} title="List ${index + 1}: ${count} tickets">${count}</span>
       `).join("");
     }
 
@@ -801,8 +801,12 @@ const technicians = [
     }
 
     function listThemeStyle(color = "#1976a3") {
+      return `style="${listThemeVars(color)}"`;
+    }
+
+    function listThemeVars(color = "#1976a3") {
       const hsl = hexToHsl(color);
-      return `style="--list-hue:${hsl.h};--list-sat:${hsl.s}%;--list-light:${hsl.l}%;"`;
+      return `--list-hue:${hsl.h};--list-sat:${hsl.s}%;--list-light:${hsl.l}%;`;
     }
 
     function hexToHsl(hex) {
@@ -1245,23 +1249,30 @@ const technicians = [
       const timed = visibleItems.filter(item => item.kind === "timed");
       const scheduleKey = techGroupKey(tech.id, "schedule");
       const noTimeKey = techGroupKey(tech.id, "noTime");
+      const pastKey = techGroupKey(tech.id, "pastNoTime");
       const scheduleCollapsed = Boolean(state.collapsedTechGroups[scheduleKey]);
       const noTimeCollapsed = Boolean(state.collapsedTechGroups[noTimeKey]);
+      const pastCollapsed = state.collapsedTechGroups[pastKey] !== false;
       const techStyle = `style="--tech-color:${escapeHtml(techThemeColor(tech.id))};"`;
+      const workload = techWorkloadSummary(timed);
       if (state.orientation === "vertical") {
         return `
           <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
             <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
               <span></span>
-              <div class="tech-name">${escapeHtml(tech.name)}</div>
+              <div class="tech-title">
+                <div class="tech-name">${escapeHtml(tech.name)}</div>
+                <span class="tech-load-badge" title="Scheduled time vs available time">${escapeHtml(workload)}</span>
+              </div>
               <button class="icon tech-edit-btn" data-edit-tech="${tech.id}" type="button" title="Edit technician theme">${pencilIconSvg()}</button>
             </header>
             <div class="vertical-task-stack">
               ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Calendar")}
               ${scheduleCollapsed ? "" : renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
-              ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks")}
+              ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
               ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
-              ${pastNoTime.length ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
+              ${pastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", pastNoTime.length, "alert") : ""}
+              ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
             </div>
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
               <div class="calendar" data-calendar-tech-id="${tech.id}">
@@ -1276,7 +1287,10 @@ const technicians = [
         <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
           <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
             <span></span>
-            <div class="tech-name">${escapeHtml(tech.name)}</div>
+            <div class="tech-title">
+              <div class="tech-name">${escapeHtml(tech.name)}</div>
+              <span class="tech-load-badge" title="Scheduled time vs available time">${escapeHtml(workload)}</span>
+            </div>
             <button class="icon tech-edit-btn" data-edit-tech="${tech.id}" type="button" title="Edit technician theme">${pencilIconSvg()}</button>
           </header>
           ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Calendar")}
@@ -1287,17 +1301,18 @@ const technicians = [
               <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
             </div>
           `}
-          ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks")}
+          ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
           ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
-          ${pastNoTime.length ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
+          ${pastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", pastNoTime.length, "alert") : ""}
+          ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
         </section>
       `;
     }
 
-    function renderTechGroupToggle(techId, group, collapsed, label) {
+    function renderTechGroupToggle(techId, group, collapsed, label, count = null, badgeTone = "") {
       return `
         <button class="tech-group-toggle" data-tech-group-toggle="${group}" data-tech-id="${techId}" type="button">
-          <span>${escapeHtml(label)}</span><span>${collapsed ? "^" : "v"}</span>
+          <span>${escapeHtml(label)} ${count !== null ? `<span class="section-count-badge ${badgeTone}">${count}</span>` : ""}</span><span>${collapsed ? "^" : "v"}</span>
         </button>
       `;
     }
@@ -1352,6 +1367,20 @@ const technicians = [
     function techThemeColor(techId) {
       const color = state.techThemes[String(techId)];
       return /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#273946";
+    }
+
+    function techWorkloadSummary(timedItems) {
+      const assignedMinutes = timedItems.reduce((total, item) => total + Number(item.duration || 30), 0);
+      const availableMinutes = Math.max(30, calendarEndMinutes() - calendarStartMinutes());
+      const percent = Math.round((assignedMinutes / availableMinutes) * 100);
+      return `${formatDurationShort(assignedMinutes)} / ${formatDurationShort(availableMinutes)} ${percent}%`;
+    }
+
+    function formatDurationShort(minutes) {
+      const value = Number(minutes || 0);
+      if (value < 60) return `${value}m`;
+      const hours = value / 60;
+      return `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
     }
 
     function renderTaskZone(kind, techId, techName, label, items, emptyText) {
