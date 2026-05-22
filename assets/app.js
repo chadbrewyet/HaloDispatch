@@ -28,6 +28,7 @@ const technicians = [
       savedFilters: {},
       selectedListFilterFields: ["assignedTo", "status", "type", "serviceZone"],
       openFilterMenu: null,
+      openFilterFields: {},
       collapsedTechGroups: {},
       sectionSizes: {},
       ticketPanelPinned: false,
@@ -186,6 +187,7 @@ const technicians = [
         if (saved.listFilters) state.listFilters = saved.listFilters;
         if (saved.savedFilters) state.savedFilters = saved.savedFilters;
         if (saved.selectedListFilterFields) state.selectedListFilterFields = saved.selectedListFilterFields;
+        if (saved.openFilterFields) state.openFilterFields = saved.openFilterFields;
         if (saved.collapsedTechGroups) state.collapsedTechGroups = saved.collapsedTechGroups;
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
         if (saved.ticketPanelPinned !== undefined) state.ticketPanelPinned = Boolean(saved.ticketPanelPinned);
@@ -221,6 +223,7 @@ const technicians = [
         listFilters: state.listFilters,
         savedFilters: state.savedFilters,
         selectedListFilterFields: state.selectedListFilterFields,
+        openFilterFields: state.openFilterFields,
         collapsedTechGroups: state.collapsedTechGroups,
         sectionSizes: state.sectionSizes,
         ticketPanelPinned: state.ticketPanelPinned,
@@ -544,6 +547,18 @@ const technicians = [
       $("reportLists").querySelectorAll("[data-filter-field]").forEach(input => {
         input.addEventListener("change", () => updateListFilterValue(input.dataset.filterList, input.dataset.filterField));
       });
+      $("reportLists").querySelectorAll("[data-filter-mode]").forEach(select => {
+        select.addEventListener("change", () => updateListFilterMode(select.dataset.filterList, select.dataset.filterMode, select.value));
+      });
+      $("reportLists").querySelectorAll("[data-filter-bulk]").forEach(button => {
+        button.addEventListener("click", () => updateListFilterBulk(button.dataset.filterList, button.dataset.filterBulk, button.dataset.bulkAction));
+      });
+      $("reportLists").querySelectorAll("[data-filter-details]").forEach(details => {
+        details.addEventListener("toggle", () => {
+          state.openFilterFields[details.dataset.filterDetails] = details.open;
+          saveLocalSettings();
+        });
+      });
       $("reportLists").querySelectorAll("[data-list-toggle]").forEach(toggle => {
         toggle.addEventListener("click", event => {
           event.preventDefault();
@@ -601,14 +616,16 @@ const technicians = [
         if (ticket.report !== report.id || !shouldShowTicketCard(ticket)) return false;
         return Object.entries(filter.values || {}).every(([field, selected]) => {
           if (!selected?.length) return true;
-          return selected.includes(String(ticketFilterValue(ticket, field)));
+          const hasValue = selected.includes(String(ticketFilterValue(ticket, field)));
+          return (filter.modes?.[field] || "include") === "exclude" ? !hasValue : hasValue;
         });
       });
     }
 
     function ensureListFilter(key) {
-      if (!state.listFilters[key]) state.listFilters[key] = { name: "", values: {} };
+      if (!state.listFilters[key]) state.listFilters[key] = { name: "", values: {}, modes: {} };
       if (!state.listFilters[key].values) state.listFilters[key].values = {};
+      if (!state.listFilters[key].modes) state.listFilters[key].modes = {};
       return state.listFilters[key];
     }
 
@@ -633,12 +650,25 @@ const technicians = [
 
     function renderFilterFieldPicker(key, field) {
       const option = listFilterFieldOptions.find(item => item.key === field) || { key: field, label: field };
-      const selected = ensureListFilter(key).values[field] || [];
+      const filter = ensureListFilter(key);
+      const selected = filter.values[field] || [];
+      const mode = filter.modes[field] || "include";
       const values = uniqueTicketValues(field);
+      const detailsKey = `${key}:${field}`;
       return `
-        <details class="multi-dropdown filter-field-dropdown">
-          <summary>${escapeHtml(option.label)}${selected.length ? ` (${selected.length})` : ""}</summary>
+        <details class="multi-dropdown filter-field-dropdown" data-filter-details="${detailsKey}" ${state.openFilterFields[detailsKey] ? "open" : ""}>
+          <summary>${escapeHtml(option.label)} ${mode === "exclude" ? "excludes" : "includes"}${selected.length ? ` (${selected.length})` : ""}</summary>
           <div class="agent-picker">
+            <div class="filter-mode-row">
+              <select data-filter-list="${key}" data-filter-mode="${field}" title="Include or exclude selected values">
+                <option value="include" ${mode === "include" ? "selected" : ""}>Include selected</option>
+                <option value="exclude" ${mode === "exclude" ? "selected" : ""}>Exclude selected</option>
+              </select>
+            </div>
+            <div class="filter-bulk-row">
+              <button type="button" data-filter-list="${key}" data-filter-bulk="${field}" data-bulk-action="select">Select All</button>
+              <button type="button" data-filter-list="${key}" data-filter-bulk="${field}" data-bulk-action="clear">Clear All</button>
+            </div>
             ${values.map(value => `
               <label class="agent-option">
                 <input type="checkbox" data-filter-list="${key}" data-filter-field="${field}" value="${escapeHtml(value)}" ${selected.includes(value) ? "checked" : ""}>
@@ -661,6 +691,7 @@ const technicians = [
 
     function filterValueLabel(field, value) {
       if (field === "assignedTo") {
+        if (String(value) === "1") return "Unassigned";
         return technicians.find(tech => String(tech.id) === String(value))?.name || (value ? `Agent ${value}` : "Unassigned");
       }
       return value;
@@ -675,6 +706,21 @@ const technicians = [
     function updateListFilterValue(key, field) {
       const selected = Array.from(document.querySelectorAll(`[data-filter-list="${key}"][data-filter-field="${field}"]:checked`)).map(input => input.value);
       ensureListFilter(key).values[field] = selected;
+      state.openFilterFields[`${key}:${field}`] = true;
+      saveLocalSettings();
+      renderReportLists();
+    }
+
+    function updateListFilterMode(key, field, mode) {
+      ensureListFilter(key).modes[field] = mode;
+      state.openFilterFields[`${key}:${field}`] = true;
+      saveLocalSettings();
+      renderReportLists();
+    }
+
+    function updateListFilterBulk(key, field, action) {
+      ensureListFilter(key).values[field] = action === "select" ? uniqueTicketValues(field) : [];
+      state.openFilterFields[`${key}:${field}`] = true;
       saveLocalSettings();
       renderReportLists();
     }
@@ -688,7 +734,7 @@ const technicians = [
         toast("Filter name needed", "Type a filter name before saving it.");
         return;
       }
-      state.savedFilters[name] = { name, values: structuredClone(filter.values || {}) };
+      state.savedFilters[name] = { name, values: structuredClone(filter.values || {}), modes: structuredClone(filter.modes || {}) };
       saveLocalSettings();
       renderDeleteFilterSelect();
       renderReportLists();
@@ -699,7 +745,8 @@ const technicians = [
       if (!name || !state.savedFilters[name]) return;
       state.listFilters[key] = {
         name,
-        values: structuredClone(state.savedFilters[name].values || {})
+        values: structuredClone(state.savedFilters[name].values || {}),
+        modes: structuredClone(state.savedFilters[name].modes || {})
       };
       saveLocalSettings();
       renderReportLists();

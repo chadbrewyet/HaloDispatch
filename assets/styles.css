@@ -472,6 +472,23 @@
       padding: 7px 9px;
     }
 
+    .filter-mode-row {
+      display: grid;
+    }
+
+    .filter-bulk-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+      gap: 6px;
+    }
+
+    .filter-bulk-row button {
+      min-height: 28px;
+      font-size: 12px;
+      font-weight: 800;
+      padding: 0 6px;
+    }
+
     .ticket-stack {
       padding: 8px;
       min-height: 116px;
