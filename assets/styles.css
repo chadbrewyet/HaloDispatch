@@ -548,10 +548,53 @@
 
     .filter-builder-head {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px auto;
+      grid-template-columns: minmax(0, 1fr) 96px auto auto;
       gap: 8px;
       align-items: end;
       margin-bottom: 12px;
+    }
+
+    .filter-name-field {
+      grid-column: 1;
+    }
+
+    .list-title-field {
+      grid-column: 1 / -1;
+    }
+
+    .copy-filter-wrap {
+      position: relative;
+    }
+
+    .wide-icon {
+      width: 42px;
+    }
+
+    .copy-filter-menu {
+      display: none;
+      position: absolute;
+      z-index: 170;
+      top: calc(100% + 5px);
+      right: 0;
+      width: min(280px, 70vw);
+      max-height: 260px;
+      overflow: auto;
+      padding: 7px;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .copy-filter-menu.open {
+      display: grid;
+      gap: 5px;
+    }
+
+    .copy-filter-menu button {
+      justify-content: start;
+      text-align: left;
+      width: 100%;
     }
 
     .filter-condition-list {
@@ -561,7 +604,7 @@
 
     .filter-condition-row {
       display: grid;
-      grid-template-columns: 92px 170px minmax(0, 1fr) auto auto;
+      grid-template-columns: 74px 92px 170px minmax(0, 1fr) auto auto;
       gap: 8px;
       align-items: start;
       padding: 8px;
@@ -573,6 +616,10 @@
     .filter-mode-toggle {
       font-size: 12px;
       font-weight: 900;
+    }
+
+    .condition-joiner-spacer {
+      min-height: 34px;
     }
 
     .filter-mode-toggle.exclude {
@@ -593,12 +640,12 @@
     .condition-value-picker[open] .agent-picker {
       position: fixed;
       z-index: 300;
-      top: 34vh;
+      top: 30vh;
       left: 50%;
       right: auto;
       transform: translateX(-50%);
-      width: min(560px, calc(100vw - 56px));
-      max-height: min(320px, 48vh);
+      width: min(380px, calc(100vw - 56px));
+      max-height: min(280px, 42vh);
       overflow: auto;
       border: 1px solid var(--line-strong);
       border-radius: 6px;

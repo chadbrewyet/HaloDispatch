@@ -29,6 +29,8 @@ const technicians = [
       selectedListFilterFields: ["assignedTo", "team", "status", "type", "serviceZone"],
       openFilterMenu: null,
       openFilterFields: {},
+      filterValueScroll: {},
+      copyFilterMenuOpen: false,
       activeFilterListKey: null,
       draftFilter: null,
       collapsedTechGroups: {},
@@ -166,7 +168,11 @@ const technicians = [
       $("filterModalCancelBtn").addEventListener("click", closeFilterModal);
       $("filterModalApplyBtn").addEventListener("click", applyFilterModal);
       $("filterModalSaveBtn").addEventListener("click", saveFilterFromModal);
-      $("filterModalName").addEventListener("change", handleFilterNameChange);
+      $("filterModalCopyBtn").addEventListener("click", toggleCopyFilterMenu);
+      $("copyFilterMenu").addEventListener("click", event => {
+        const button = event.target.closest("[data-copy-filter]");
+        if (button) copySavedFilterToDraft(button.dataset.copyFilter);
+      });
       $("filterModalListTitle").addEventListener("input", () => {
         if (state.draftFilter) state.draftFilter.title = $("filterModalListTitle").value;
       });
@@ -655,11 +661,14 @@ const technicians = [
       const filter = ensureListFilter(key);
       return tickets.filter(ticket => {
         if (ticket.report !== report.id || !shouldShowTicketCard(ticket)) return false;
-        return filterConditions(filter).every(condition => {
-          if (!condition.values?.length) return true;
+        const activeConditions = filterConditions(filter).filter(condition => condition.values?.length);
+        if (!activeConditions.length) return true;
+        return activeConditions.reduce((matches, condition, index) => {
           const hasValue = condition.values.includes(String(ticketFilterValue(ticket, condition.field)));
-          return condition.mode === "exclude" ? !hasValue : hasValue;
-        });
+          const conditionMatches = condition.mode === "exclude" ? !hasValue : hasValue;
+          if (index === 0) return conditionMatches;
+          return condition.joiner === "or" ? matches || conditionMatches : matches && conditionMatches;
+        }, true);
       });
     }
 
@@ -681,13 +690,14 @@ const technicians = [
     function conditionsFromLegacyFilter(filter) {
       return Object.entries(filter.values || {}).map(([field, values]) => ({
         field,
+        joiner: "and",
         mode: filter.modes?.[field] || "include",
         values: values || []
       }));
     }
 
     function defaultCondition() {
-      return { mode: "include", field: state.selectedListFilterFields[0] || "assignedTo", values: [] };
+      return { joiner: "and", mode: "include", field: state.selectedListFilterFields[0] || "assignedTo", values: [] };
     }
 
     function listThemeStyle(color = "#1976a3") {
@@ -738,6 +748,7 @@ const technicians = [
     function openFilterModal(key) {
       const filter = ensureListFilter(key);
       state.activeFilterListKey = key;
+      state.copyFilterMenuOpen = false;
       state.draftFilter = {
         name: filter.name || "",
         title: filter.title || filter.name || "",
@@ -760,10 +771,10 @@ const technicians = [
       $("filterModalName").value = state.draftFilter.name || "";
       $("filterModalListTitle").value = state.draftFilter.title || "";
       $("filterModalColor").value = state.draftFilter.color || "#1976a3";
-      $("filterModalSavedNames").innerHTML = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b))
-        .map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
+      renderCopyFilterMenu();
       $("filterConditionList").innerHTML = state.draftFilter.conditions.map((condition, index) => renderFilterConditionRow(condition, index)).join("");
       wireFilterModalRows();
+      restoreFilterValueScroll();
     }
 
     function renderFilterConditionRow(condition, index) {
@@ -772,6 +783,12 @@ const technicians = [
       const fieldOptions = listFilterFieldOptions.map(field => `<option value="${field.key}" ${field.key === condition.field ? "selected" : ""}>${escapeHtml(field.label)}</option>`).join("");
       return `
         <div class="filter-condition-row" data-condition-index="${index}">
+          ${index > 0 ? `
+            <select data-condition-joiner="${index}" title="How this condition combines with the previous condition">
+              <option value="and" ${(condition.joiner || "and") === "and" ? "selected" : ""}>And</option>
+              <option value="or" ${condition.joiner === "or" ? "selected" : ""}>Or</option>
+            </select>
+          ` : `<div class="condition-joiner-spacer"></div>`}
           <button class="filter-mode-toggle ${condition.mode === "exclude" ? "exclude" : ""}" data-condition-mode="${index}" type="button">${condition.mode === "exclude" ? "Exclude" : "Include"}</button>
           <select data-condition-field="${index}">${fieldOptions}</select>
           <details class="multi-dropdown condition-value-picker" data-condition-details="${index}" ${state.openFilterFields[`modal:${index}`] ? "open" : ""}>
@@ -796,6 +813,12 @@ const technicians = [
     }
 
     function wireFilterModalRows() {
+      $("filterConditionList").querySelectorAll("[data-condition-joiner]").forEach(select => {
+        select.addEventListener("change", () => {
+          state.draftFilter.conditions[Number(select.dataset.conditionJoiner)].joiner = select.value;
+          renderFilterModal();
+        });
+      });
       $("filterConditionList").querySelectorAll("[data-condition-mode]").forEach(button => {
         button.addEventListener("click", () => {
           const condition = state.draftFilter.conditions[Number(button.dataset.conditionMode)];
@@ -814,6 +837,7 @@ const technicians = [
       $("filterConditionList").querySelectorAll("[data-condition-value]").forEach(input => {
         input.addEventListener("change", () => {
           const index = Number(input.dataset.conditionValue);
+          rememberFilterValueScroll(index);
           state.draftFilter.conditions[index].values = Array.from(document.querySelectorAll(`[data-condition-value="${index}"]:checked`)).map(item => item.value);
           state.openFilterFields[`modal:${index}`] = true;
           renderFilterModal();
@@ -822,6 +846,7 @@ const technicians = [
       $("filterConditionList").querySelectorAll("[data-condition-bulk]").forEach(button => {
         button.addEventListener("click", () => {
           const index = Number(button.dataset.conditionBulk);
+          rememberFilterValueScroll(index);
           const condition = state.draftFilter.conditions[index];
           condition.values = button.dataset.bulkAction === "select" ? uniqueTicketValues(condition.field) : [];
           state.openFilterFields[`modal:${index}`] = true;
@@ -843,24 +868,50 @@ const technicians = [
       $("filterConditionList").querySelectorAll("[data-condition-details]").forEach(details => {
         details.addEventListener("toggle", () => {
           state.openFilterFields[`modal:${details.dataset.conditionDetails}`] = details.open;
+          if (!details.open) delete state.filterValueScroll[`modal:${details.dataset.conditionDetails}`];
         });
       });
     }
 
-    function handleFilterNameChange() {
-      if (!state.draftFilter) return;
-      const name = $("filterModalName").value.trim();
-      if (state.savedFilters[name]) {
-        state.draftFilter = {
-          name,
-          title: state.savedFilters[name].title || name,
-          color: state.savedFilters[name].color || "#1976a3",
-          conditions: structuredClone(filterConditions(state.savedFilters[name]))
-        };
-        if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
-      } else {
-        state.draftFilter.name = name;
-      }
+    function rememberFilterValueScroll(index) {
+      const picker = document.querySelector(`[data-condition-details="${index}"] .agent-picker`);
+      if (picker) state.filterValueScroll[`modal:${index}`] = picker.scrollTop;
+    }
+
+    function restoreFilterValueScroll() {
+      requestAnimationFrame(() => {
+        Object.entries(state.filterValueScroll).forEach(([key, top]) => {
+          const index = key.replace("modal:", "");
+          const picker = document.querySelector(`[data-condition-details="${index}"] .agent-picker`);
+          if (picker) picker.scrollTop = top;
+        });
+      });
+    }
+
+    function renderCopyFilterMenu() {
+      const names = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b));
+      $("copyFilterMenu").classList.toggle("open", state.copyFilterMenuOpen);
+      $("copyFilterMenu").innerHTML = names.length
+        ? names.map(name => `<button type="button" data-copy-filter="${escapeHtml(name)}">${escapeHtml(name)}</button>`).join("")
+        : `<div class="empty">No saved filters yet.</div>`;
+    }
+
+    function toggleCopyFilterMenu() {
+      state.copyFilterMenuOpen = !state.copyFilterMenuOpen;
+      renderCopyFilterMenu();
+    }
+
+    function copySavedFilterToDraft(name) {
+      const filter = state.savedFilters[name];
+      if (!filter || !state.draftFilter) return;
+      state.draftFilter = {
+        name: state.draftFilter.name,
+        title: state.draftFilter.title || filter.title || name,
+        color: filter.color || state.draftFilter.color || "#1976a3",
+        conditions: structuredClone(filterConditions(filter))
+      };
+      if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
+      state.copyFilterMenuOpen = false;
       renderFilterModal();
     }
 
@@ -905,8 +956,10 @@ const technicians = [
       };
       normalized.conditions.forEach(condition => {
         if (!condition.field) return;
+        condition.joiner = condition.joiner || "and";
+        condition.mode = condition.mode || "include";
         normalized.values[condition.field] = condition.values || [];
-        normalized.modes[condition.field] = condition.mode || "include";
+        normalized.modes[condition.field] = condition.mode;
       });
       return normalized;
     }

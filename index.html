@@ -251,22 +251,27 @@
       </div>
       <div class="modal-body">
         <div class="filter-builder-head">
-          <div class="field">
+          <div class="field filter-name-field">
             <label>Filter Name</label>
-            <input id="filterModalName" list="filterModalSavedNames" placeholder="Type or choose a saved filter">
-            <datalist id="filterModalSavedNames"></datalist>
-          </div>
-          <div class="field">
-            <label>List Title</label>
-            <input id="filterModalListTitle" placeholder="Title shown on the ticket list">
+            <input id="filterModalName" placeholder="Saved filter name">
           </div>
           <div class="field compact-field">
             <label>List Color</label>
             <input id="filterModalColor" type="color" value="#1976a3">
           </div>
+          <div class="copy-filter-wrap">
+            <button class="icon wide-icon" id="filterModalCopyBtn" type="button" title="Copy saved filter">
+              <svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M4 18h7v2H4v-2Zm12.8-15.4 4.6 4.6-9.8 9.8H7v-4.6l9.8-9.8Zm0 2.8L9 13.2V15h1.8l7.8-7.8-1.8-1.8ZM3 5h9v2H3V5Zm0 4h5v2H3V9Z" fill="currentColor"/></svg>
+            </button>
+            <div class="copy-filter-menu" id="copyFilterMenu"></div>
+          </div>
           <button class="icon" id="filterModalSaveBtn" type="button" title="Save filter">
             <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 4h12l2 2v14H5V4Zm2 2v5h9V6H7Zm2 9v3h6v-3H9Z" fill="currentColor"/></svg>
           </button>
+          <div class="field list-title-field">
+            <label>List Title</label>
+            <input id="filterModalListTitle" placeholder="Title shown on the ticket list">
+          </div>
         </div>
         <div class="filter-condition-list" id="filterConditionList"></div>
       </div>
