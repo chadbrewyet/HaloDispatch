@@ -19,6 +19,8 @@ const technicians = [
       reportLists: ["api-open"],
       visibleFields: ["client", "sla", "estimate"],
       workingHours: [7, 17],
+      calendarStartTime: "07:00",
+      calendarEndTime: "17:00",
       show24Hours: false,
       colorBy: "priority",
       theme: "light",
@@ -33,6 +35,8 @@ const technicians = [
       copyFilterMenuOpen: false,
       activeFilterListKey: null,
       draftFilter: null,
+      activeTechEditId: null,
+      techThemes: {},
       collapsedTechGroups: {},
       sectionSizes: {},
       ticketPanelPinned: false,
@@ -128,11 +132,13 @@ const technicians = [
       });
       $("show24HoursCheck").addEventListener("change", () => {
         state.show24Hours = $("show24HoursCheck").checked;
-        state.workingHours = state.show24Hours ? [0, 24] : [7, 17];
+        updateWorkingHours();
         state.shouldCenterNow = true;
         saveLocalSettings();
         renderBoard();
       });
+      $("calendarStartTime").addEventListener("change", updateCalendarBounds);
+      $("calendarEndTime").addEventListener("change", updateCalendarBounds);
       $("colorBySelect").addEventListener("change", () => {
         state.colorBy = $("colorBySelect").value;
         saveLocalSettings();
@@ -176,6 +182,9 @@ const technicians = [
       $("filterModalColor").addEventListener("input", () => {
         if (state.draftFilter) state.draftFilter.color = $("filterModalColor").value;
       });
+      $("closeTechThemeModalBtn").addEventListener("click", closeTechThemeModal);
+      $("cancelTechThemeBtn").addEventListener("click", closeTechThemeModal);
+      $("saveTechThemeBtn").addEventListener("click", saveTechTheme);
       document.addEventListener("click", event => {
         if (!event.target.closest(".ticket-popover")) closeTicketPopover();
         closeFloatingSurfaces(event);
@@ -192,9 +201,13 @@ const technicians = [
         }
         if (saved.show24Hours !== undefined) {
           state.show24Hours = Boolean(saved.show24Hours);
-          state.workingHours = state.show24Hours ? [0, 24] : [7, 17];
           $("show24HoursCheck").checked = state.show24Hours;
         }
+        if (isValidTime(saved.calendarStartTime)) state.calendarStartTime = saved.calendarStartTime;
+        if (isValidTime(saved.calendarEndTime)) state.calendarEndTime = saved.calendarEndTime;
+        $("calendarStartTime").value = state.calendarStartTime;
+        $("calendarEndTime").value = state.calendarEndTime;
+        updateWorkingHours();
         if (saved.theme) {
           state.theme = saved.theme;
           $("themeSelect").value = saved.theme;
@@ -205,6 +218,7 @@ const technicians = [
         if (saved.listFilters) state.listFilters = saved.listFilters;
         if (saved.savedFilters) state.savedFilters = saved.savedFilters;
         if (saved.selectedListFilterFields) state.selectedListFilterFields = saved.selectedListFilterFields;
+        if (saved.techThemes) state.techThemes = saved.techThemes;
         if (saved.openFilterFields) state.openFilterFields = saved.openFilterFields;
         if (saved.collapsedTechGroups) state.collapsedTechGroups = saved.collapsedTechGroups;
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
@@ -235,6 +249,8 @@ const technicians = [
         visibleFields: state.visibleFields,
         colorBy: state.colorBy,
         show24Hours: state.show24Hours,
+        calendarStartTime: state.calendarStartTime,
+        calendarEndTime: state.calendarEndTime,
         theme: state.theme,
         reportLists: state.reportLists,
         listViews: state.listViews,
@@ -242,6 +258,7 @@ const technicians = [
         listFilters: state.listFilters,
         savedFilters: state.savedFilters,
         selectedListFilterFields: state.selectedListFilterFields,
+        techThemes: state.techThemes,
         openFilterFields: state.openFilterFields,
         collapsedTechGroups: state.collapsedTechGroups,
         sectionSizes: state.sectionSizes,
@@ -273,6 +290,57 @@ const technicians = [
       });
     }
 
+    function updateCalendarBounds() {
+      const nextStart = $("calendarStartTime").value;
+      const nextEnd = $("calendarEndTime").value;
+      if (!isValidTime(nextStart) || !isValidTime(nextEnd) || timeToMinutes(nextEnd) <= timeToMinutes(nextStart)) {
+        $("calendarStartTime").value = state.calendarStartTime;
+        $("calendarEndTime").value = state.calendarEndTime;
+        toast("Calendar time not changed", "The end time must be later than the start time.");
+        return;
+      }
+      state.calendarStartTime = nextStart;
+      state.calendarEndTime = nextEnd;
+      updateWorkingHours();
+      state.shouldCenterNow = true;
+      saveLocalSettings();
+      renderBoard();
+    }
+
+    function updateWorkingHours() {
+      if (state.show24Hours) {
+        state.workingHours = [0, 24];
+        return;
+      }
+      state.workingHours = [timeToMinutes(state.calendarStartTime) / 60, timeToMinutes(state.calendarEndTime) / 60];
+    }
+
+    function calendarStartMinutes() {
+      return state.show24Hours ? 0 : timeToMinutes(state.calendarStartTime);
+    }
+
+    function calendarEndMinutes() {
+      return state.show24Hours ? 1440 : timeToMinutes(state.calendarEndTime);
+    }
+
+    function isValidTime(value) {
+      if (!/^\d{2}:\d{2}$/.test(String(value || ""))) return false;
+      const [hour, minute] = String(value).split(":").map(Number);
+      return hour >= 0 && hour <= 23 && minute >= 0 && minute <= 59;
+    }
+
+    function timeToMinutes(value) {
+      const [hour = 0, minute = 0] = String(value || "00:00").split(":").map(Number);
+      return Math.min(1440, Math.max(0, (hour * 60) + minute));
+    }
+
+    function minutesToTime(minutes) {
+      const normalized = Math.min(1439, Math.max(0, minutes));
+      const hour = Math.floor(normalized / 60);
+      const minute = normalized % 60;
+      return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+    }
+
     function closeFloatingSurfaces(event) {
       const target = event.target;
       const path = event.composedPath ? event.composedPath() : [];
@@ -283,6 +351,9 @@ const technicians = [
       }
       if ($("filterModal").classList.contains("open") && target === $("filterModal")) {
         closeFilterModal();
+      }
+      if ($("techThemeModal").classList.contains("open") && target === $("techThemeModal")) {
+        closeTechThemeModal();
       }
       if ($("configDrawer").classList.contains("open") && !target.closest("#configDrawer") && !target.closest("#settingsBtn")) {
         $("configDrawer").classList.remove("open");
@@ -1124,6 +1195,7 @@ const technicians = [
       board.innerHTML = selectedTechs.map(renderTechColumn).join("");
       restoreCalendarScroll();
       wireTechReordering();
+      wireTechEditButtons();
       wireDropZones();
       wireZoneExpanders();
       wireTechGroupToggles();
@@ -1139,17 +1211,20 @@ const technicians = [
       const noTimeKey = techGroupKey(tech.id, "noTime");
       const scheduleCollapsed = Boolean(state.collapsedTechGroups[scheduleKey]);
       const noTimeCollapsed = Boolean(state.collapsedTechGroups[noTimeKey]);
+      const techStyle = `style="--tech-color:${escapeHtml(techThemeColor(tech.id))};"`;
       if (state.orientation === "vertical") {
         return `
-          <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}">
+          <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
             <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
+              <span></span>
               <div class="tech-name">${escapeHtml(tech.name)}</div>
+              <button class="icon tech-edit-btn" data-edit-tech="${tech.id}" type="button" title="Edit technician theme">${pencilIconSvg()}</button>
             </header>
             <div class="vertical-task-stack">
-              ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Scheduled")}
+              ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Calendar")}
               ${scheduleCollapsed ? "" : renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
-              ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "No-Time")}
-              ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Tasks Without Time", noTime, "Drop ticket here to assign date only")}
+              ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks")}
+              ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
             </div>
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
               <div class="calendar" data-calendar-tech-id="${tech.id}">
@@ -1161,11 +1236,13 @@ const technicians = [
         `;
       }
       return `
-        <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}">
+        <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
           <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
+            <span></span>
             <div class="tech-name">${escapeHtml(tech.name)}</div>
+            <button class="icon tech-edit-btn" data-edit-tech="${tech.id}" type="button" title="Edit technician theme">${pencilIconSvg()}</button>
           </header>
-          ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "All-Day + Calendar")}
+          ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Calendar")}
           ${scheduleCollapsed ? "" : `
             ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
             <div class="calendar" data-calendar-tech-id="${tech.id}">
@@ -1173,8 +1250,8 @@ const technicians = [
               <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
             </div>
           `}
-          ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Tasks Without Time")}
-          ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Tasks Without Time", noTime, "Drop ticket here to assign date only")}
+          ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks")}
+          ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
         </section>
       `;
     }
@@ -1202,12 +1279,50 @@ const technicians = [
       });
     }
 
+    function wireTechEditButtons() {
+      document.querySelectorAll("[data-edit-tech]").forEach(button => {
+        button.addEventListener("pointerdown", event => event.stopPropagation());
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          openTechThemeModal(button.dataset.editTech);
+        });
+      });
+    }
+
+    function openTechThemeModal(techId) {
+      const tech = technicians.find(item => String(item.id) === String(techId));
+      if (!tech) return;
+      state.activeTechEditId = String(techId);
+      $("techThemeModalTitle").textContent = `Edit ${tech.name}`;
+      $("techThemeColor").value = techThemeColor(techId);
+      $("techThemeModal").classList.add("open");
+    }
+
+    function closeTechThemeModal() {
+      $("techThemeModal").classList.remove("open");
+      state.activeTechEditId = null;
+    }
+
+    function saveTechTheme() {
+      if (!state.activeTechEditId) return;
+      state.techThemes[state.activeTechEditId] = $("techThemeColor").value;
+      saveLocalSettings();
+      closeTechThemeModal();
+      renderBoard();
+    }
+
+    function techThemeColor(techId) {
+      const color = state.techThemes[String(techId)];
+      return /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#273946";
+    }
+
     function renderTaskZone(kind, techId, techName, label, items, emptyText) {
+      const showInlineLabel = kind !== "noTime";
       return `
         <div class="drop-zone" data-drop-kind="${kind}" data-tech-id="${techId}">
           <div class="expanded-title">${escapeHtml(label)} - ${escapeHtml(techName)}</div>
           <div class="zone-topline">
-            <div class="zone-label">${label}</div>
+            ${showInlineLabel ? `<div class="zone-label">${label}</div>` : `<div></div>`}
             <button class="expand-zone" data-expand-zone type="button" title="Expand section">^</button>
           </div>
           <div class="zone-items">${items.length ? items.map(renderSmallEvent).join("") : `<div class="empty">${emptyText}</div>`}</div>
@@ -1217,12 +1332,13 @@ const technicians = [
 
     function renderTimeLabels() {
       const labels = [];
-      for (let hour = state.workingHours[0]; hour < state.workingHours[1]; hour++) {
+      for (let minutes = calendarStartMinutes(); minutes < calendarEndMinutes(); minutes += 60) {
+        const time = minutesToTime(minutes);
         if (state.orientation === "vertical") {
-          labels.push(`<div class="time-label">${formatTime(`${String(hour).padStart(2, "0")}:00`)}</div>`);
-          labels.push(`<div class="time-label">${formatTime(`${String(hour).padStart(2, "0")}:30`)}</div>`);
+          labels.push(`<div class="time-label">${formatTime(time)}</div>`);
+          labels.push(`<div class="time-label">${formatTime(minutesToTime(minutes + 30))}</div>`);
         } else {
-          labels.push(`<div class="time-label">${formatHour(hour)}</div>`);
+          labels.push(`<div class="time-label">${formatTime(time)}</div>`);
         }
       }
       return labels.join("");
@@ -1260,18 +1376,16 @@ const technicians = [
     function renderTimeSlots(techId, timed) {
       const slots = [];
       const nowMarker = renderCurrentTimeMarker();
-      for (let hour = state.workingHours[0]; hour < state.workingHours[1]; hour++) {
-        for (const minute of [0, 30]) {
-          const time = `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
-          const slotItems = timed
-            .filter(item => slotForTime(item.time) === time)
-            .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
-          slots.push(`
-            <div class="time-slot ${slotItems.length > 1 ? "has-overlap" : ""}" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
-              ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length, state.orientation)).join("")}
-            </div>
-          `);
-        }
+      for (let minutes = calendarStartMinutes(); minutes < calendarEndMinutes(); minutes += 30) {
+        const time = minutesToTime(minutes);
+        const slotItems = timed
+          .filter(item => slotForTime(item.time) === time)
+          .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
+        slots.push(`
+          <div class="time-slot ${slotItems.length > 1 ? "has-overlap" : ""}" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
+            ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length, state.orientation)).join("")}
+          </div>
+        `);
       }
       return `${nowMarker}${slots.join("")}`;
     }
@@ -1289,8 +1403,8 @@ const technicians = [
       if (!isTodaySelected()) return null;
       const now = new Date();
       const minutes = (now.getHours() * 60) + now.getMinutes();
-      const start = state.workingHours[0] * 60;
-      const end = state.workingHours[1] * 60;
+      const start = calendarStartMinutes();
+      const end = calendarEndMinutes();
       if (minutes < start || minutes > end) return null;
       return ((minutes - start) / (end - start)) * 100;
     }

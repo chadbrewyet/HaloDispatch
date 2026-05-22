@@ -88,6 +88,16 @@
             <option value="type">Ticket Type</option>
           </select>
         </div>
+        <div class="settings-two-col">
+          <div class="field">
+            <label>Calendar From</label>
+            <input id="calendarStartTime" type="time" step="1800" value="07:00">
+          </div>
+          <div class="field">
+            <label>Calendar To</label>
+            <input id="calendarEndTime" type="time" step="1800" value="17:00">
+          </div>
+        </div>
         <div class="field">
           <label>Ticket Card Fields</label>
           <details class="multi-dropdown">
@@ -264,6 +274,25 @@
       <div class="modal-actions">
         <button id="filterModalCancelBtn">Cancel</button>
         <button id="filterModalApplyBtn" class="primary">Apply</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="techThemeModal">
+    <div class="modal tech-theme-modal" role="dialog" aria-modal="true" aria-labelledby="techThemeModalTitle">
+      <div class="panel-head">
+        <h2 id="techThemeModalTitle">Edit Technician</h2>
+        <button class="icon" id="closeTechThemeModalBtn" title="Close technician editor">x</button>
+      </div>
+      <div class="modal-body">
+        <div class="field">
+          <label>Color Theme</label>
+          <input id="techThemeColor" type="color" value="#273946">
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button id="cancelTechThemeBtn">Cancel</button>
+        <button id="saveTechThemeBtn" class="primary">Apply</button>
       </div>
     </div>
   </div>
