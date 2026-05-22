@@ -113,7 +113,11 @@ const technicians = [
     }
 
     function bindEvents() {
-      $("addListBtn").addEventListener("click", addReportList);
+      $("addListBtn").addEventListener("pointerdown", event => event.stopPropagation());
+      $("addListBtn").addEventListener("click", event => {
+        event.stopPropagation();
+        addReportList();
+      });
       $("ticketPanelTab").addEventListener("click", () => setTicketPanelOpen(true));
       $("ticketPanelTab").addEventListener("keydown", event => {
         if (event.key !== "Enter" && event.key !== " ") return;
@@ -126,7 +130,11 @@ const technicians = [
         setTicketPanelOpen(false);
         saveLocalSettings();
       });
-      $("pinTicketPanelBtn").addEventListener("click", toggleTicketPanelPin);
+      $("pinTicketPanelBtn").addEventListener("pointerdown", event => event.stopPropagation());
+      $("pinTicketPanelBtn").addEventListener("click", event => {
+        event.stopPropagation();
+        toggleTicketPanelPin();
+      });
       $("ticketPanelResizer").addEventListener("pointerdown", startTicketPanelResize);
       $("prevDay").addEventListener("click", () => shiftDate(-1));
       $("nextDay").addEventListener("click", () => shiftDate(1));
