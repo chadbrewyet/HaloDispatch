@@ -24,6 +24,11 @@ const technicians = [
       theme: "light",
       listViews: {},
       collapsedLists: {},
+      listFilters: {},
+      savedFilters: {},
+      selectedListFilterFields: ["assignedTo", "status", "type", "serviceZone"],
+      openFilterMenu: null,
+      collapsedTechGroups: {},
       sectionSizes: {},
       ticketPanelPinned: false,
       ticketPanelOpen: false,
@@ -49,6 +54,17 @@ const technicians = [
       { key: "type", label: "Type" }
     ];
 
+    const listFilterFieldOptions = [
+      { key: "assignedTo", label: "Tech Assigned" },
+      { key: "status", label: "Status" },
+      { key: "type", label: "Ticket Type" },
+      { key: "serviceZone", label: "Service Zone" },
+      { key: "priority", label: "Priority" },
+      { key: "client", label: "Client" },
+      { key: "site", label: "Site" },
+      { key: "contact", label: "Contact" }
+    ];
+
     const $ = (id) => document.getElementById(id);
 
     function init() {
@@ -64,6 +80,8 @@ const technicians = [
       renderTeamSelect();
       renderTechPicker();
       renderTicketTypeSelect();
+      renderListFilterFieldPicker();
+      renderDeleteFilterSelect();
       renderFieldChecks();
       renderReportLists();
       renderBoard();
@@ -132,6 +150,7 @@ const technicians = [
         resetAppointmentRefreshTimer();
       });
       $("refreshBtn").addEventListener("click", refreshReports);
+      $("deleteSavedFilterBtn").addEventListener("click", deleteSelectedSavedFilter);
       $("closeModalBtn").addEventListener("click", closeAppointmentModal);
       $("cancelAppointmentBtn").addEventListener("click", closeAppointmentModal);
       $("saveAppointmentBtn").addEventListener("click", saveAppointment);
@@ -164,6 +183,10 @@ const technicians = [
         }
         if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
         if (saved.collapsedLists) state.collapsedLists = saved.collapsedLists;
+        if (saved.listFilters) state.listFilters = saved.listFilters;
+        if (saved.savedFilters) state.savedFilters = saved.savedFilters;
+        if (saved.selectedListFilterFields) state.selectedListFilterFields = saved.selectedListFilterFields;
+        if (saved.collapsedTechGroups) state.collapsedTechGroups = saved.collapsedTechGroups;
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
         if (saved.ticketPanelPinned !== undefined) state.ticketPanelPinned = Boolean(saved.ticketPanelPinned);
         if (saved.ticketPanelWidth) state.ticketPanelWidth = Number(saved.ticketPanelWidth);
@@ -195,6 +218,10 @@ const technicians = [
         theme: state.theme,
         listViews: state.listViews,
         collapsedLists: state.collapsedLists,
+        listFilters: state.listFilters,
+        savedFilters: state.savedFilters,
+        selectedListFilterFields: state.selectedListFilterFields,
+        collapsedTechGroups: state.collapsedTechGroups,
         sectionSizes: state.sectionSizes,
         ticketPanelPinned: state.ticketPanelPinned,
         ticketPanelWidth: state.ticketPanelWidth,
@@ -228,6 +255,7 @@ const technicians = [
       const target = event.target;
       const path = event.composedPath ? event.composedPath() : [];
       const clickedInTicketPanel = path.some(node => node?.classList?.contains("left-panel")) || Boolean(target.closest(".left-panel"));
+      const clickedInTicketFilter = path.some(node => node?.classList?.contains("ticket-filter-menu")) || Boolean(target.closest(".ticket-filter-menu"));
       if ($("appointmentModal").classList.contains("open") && target === $("appointmentModal")) {
         closeAppointmentModal();
       }
@@ -236,6 +264,10 @@ const technicians = [
       }
       if ($("configDrawer").classList.contains("open") && !target.closest("#configDrawer") && !target.closest("#settingsBtn")) {
         $("configDrawer").classList.remove("open");
+      }
+      if (state.openFilterMenu && !clickedInTicketFilter && !target.closest("[data-filter-toggle]")) {
+        state.openFilterMenu = null;
+        renderReportLists();
       }
       if (state.ticketPanelOpen && !state.ticketPanelPinned && !clickedInTicketPanel && !target.closest("#ticketPanelToggle")) {
         setTicketPanelOpen(false);
@@ -264,6 +296,22 @@ const technicians = [
           <path d="M8 3h8v2l-1 1v5l3 3v2h-5v5l-1 1-1-1v-5H6v-2l3-3V6L8 5V3Zm3 4v4.8L8.8 14h6.4L13 11.8V7h-2Z" fill="currentColor"/>
         </svg>
       `;
+    }
+
+    function funnelIconSvg() {
+      return `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M4 5h16l-6 7v6l-4 2v-8L4 5Z" fill="currentColor"/></svg>`;
+    }
+
+    function squareIconSvg() {
+      return `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 5h14v14H5V5Zm2 2v10h10V7H7Z" fill="currentColor"/></svg>`;
+    }
+
+    function listIconSvg() {
+      return `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 6h3v3H5V6Zm5 1h9v1.8h-9V7ZM5 11h3v3H5v-3Zm5 1h9v1.8h-9V12ZM5 16h3v3H5v-3Zm5 1h9v1.8h-9V17Z" fill="currentColor"/></svg>`;
+    }
+
+    function saveIconSvg() {
+      return `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 4h12l2 2v14H5V4Zm2 2v5h9V6H7Zm2 9v3h6v-3H9Z" fill="currentColor"/></svg>`;
     }
 
     function setTicketPanelOpen(open) {
@@ -377,6 +425,46 @@ const technicians = [
       });
     }
 
+    function renderListFilterFieldPicker() {
+      const picker = $("listFilterFieldPicker");
+      if (!picker) return;
+      $("listFilterFieldSummary").textContent = summaryText(state.selectedListFilterFields.length, listFilterFieldOptions.length, "field", "fields");
+      picker.innerHTML = listFilterFieldOptions.map(field => `
+        <label class="agent-option">
+          <input type="checkbox" value="${field.key}" ${state.selectedListFilterFields.includes(field.key) ? "checked" : ""}>
+          <span>${escapeHtml(field.label)}</span>
+        </label>
+      `).join("");
+      picker.querySelectorAll("input").forEach(input => {
+        input.addEventListener("change", () => {
+          state.selectedListFilterFields = Array.from(picker.querySelectorAll("input:checked")).map(item => item.value);
+          saveLocalSettings();
+          renderListFilterFieldPicker();
+          renderReportLists();
+        });
+      });
+    }
+
+    function renderDeleteFilterSelect() {
+      const select = $("deleteFilterSelect");
+      if (!select) return;
+      const names = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b));
+      select.innerHTML = `<option value="">Select saved filter</option>${names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}`;
+    }
+
+    function deleteSelectedSavedFilter() {
+      const name = $("deleteFilterSelect").value;
+      if (!name || !state.savedFilters[name]) return;
+      delete state.savedFilters[name];
+      Object.values(state.listFilters).forEach(filter => {
+        if (filter.name === name) filter.name = "";
+      });
+      saveLocalSettings();
+      renderDeleteFilterSelect();
+      renderReportLists();
+      toast("Filter deleted", `${name} was removed from saved ticket filters.`);
+    }
+
     function filteredTechnicians() {
       if (!state.selectedTeams.length) return [];
       const selectedTeams = new Set(state.selectedTeams.map(String));
@@ -417,20 +505,11 @@ const technicians = [
         updateTicketPanelBadges([]);
         return;
       }
-      const counts = state.reportLists.map(reportId => {
-        const report = reports.find(item => item.id === reportId) || reports[0];
-        return tickets.filter(ticket => ticket.report === report.id && shouldShowTicketCard(ticket)).length;
-      });
+      const counts = state.reportLists.map((reportId, index) => filteredTicketsForList(reportId, index).length);
       const expandedCount = state.reportLists.filter((reportId, index) => !state.collapsedLists[sectionKey(index)]).length;
       $("reportLists").className = `report-lists expanded-count-${Math.min(expandedCount, 3)}`;
       $("reportLists").innerHTML = state.reportLists.map((reportId, index) => renderReportList(reportId, index)).join("");
       updateTicketPanelBadges(counts);
-      $("reportLists").querySelectorAll("[data-report-select]").forEach(select => {
-        select.addEventListener("change", () => {
-          state.reportLists[Number(select.dataset.index)] = select.value;
-          renderReportLists();
-        });
-      });
       $("reportLists").querySelectorAll("[data-remove-list]").forEach(button => {
         button.addEventListener("click", () => {
           state.reportLists.splice(Number(button.dataset.index), 1);
@@ -438,12 +517,32 @@ const technicians = [
           renderReportLists();
         });
       });
-      $("reportLists").querySelectorAll("[data-list-view]").forEach(select => {
-        select.addEventListener("change", () => {
-          state.listViews[sectionKey(Number(select.dataset.index))] = select.value;
+      $("reportLists").querySelectorAll("[data-list-view]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.listViews[sectionKey(Number(button.dataset.index))] = button.dataset.view;
           saveLocalSettings();
           renderReportLists();
         });
+      });
+      $("reportLists").querySelectorAll("[data-filter-toggle]").forEach(button => {
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          const key = button.dataset.filterToggle;
+          state.openFilterMenu = state.openFilterMenu === key ? null : key;
+          renderReportLists();
+        });
+      });
+      $("reportLists").querySelectorAll("[data-filter-name]").forEach(input => {
+        input.addEventListener("change", () => setListFilterName(input.dataset.filterName, input.value.trim()));
+      });
+      $("reportLists").querySelectorAll("[data-save-filter]").forEach(button => {
+        button.addEventListener("click", () => saveNamedFilter(button.dataset.saveFilter));
+      });
+      $("reportLists").querySelectorAll("[data-saved-filter-select]").forEach(select => {
+        select.addEventListener("change", () => applySavedFilterToList(select.dataset.savedFilterSelect, select.value));
+      });
+      $("reportLists").querySelectorAll("[data-filter-field]").forEach(input => {
+        input.addEventListener("change", () => updateListFilterValue(input.dataset.filterList, input.dataset.filterField));
       });
       $("reportLists").querySelectorAll("[data-list-toggle]").forEach(toggle => {
         toggle.addEventListener("click", event => {
@@ -466,31 +565,144 @@ const technicians = [
 
     function renderReportList(reportId, index) {
       const report = reports.find(item => item.id === reportId) || reports[0];
-      const listTickets = tickets.filter(ticket => ticket.report === report.id && shouldShowTicketCard(ticket));
-      const options = reports.map(item => `<option value="${item.id}" ${item.id === report.id ? "selected" : ""}>${escapeHtml(item.name)}</option>`).join("");
+      const listTickets = filteredTicketsForList(reportId, index);
       const key = sectionKey(index);
       const view = state.listViews[key] || "card";
       const collapsed = Boolean(state.collapsedLists[key]);
+      const listFilter = ensureListFilter(key);
+      const title = listFilter.name || report.name;
       return `
         <section class="report-list ${collapsed ? "collapsed" : ""}">
           <header>
             <button class="icon chevron-button" data-list-toggle="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">${collapsed ? "⌃" : "⌄"}</button>
-            <div class="report-name">${escapeHtml(report.name)}</div>
-            <button class="icon" data-remove-list data-index="${index}" title="Remove list">-</button>
+            <div class="report-name">${escapeHtml(title)} <span class="count-badge" title="${listTickets.length} open tickets">${listTickets.length}</span></div>
+            <div class="report-actions">
+              <button class="icon ${view === "card" ? "active" : ""}" data-list-view data-index="${index}" data-view="card" title="Card view">${squareIconSvg()}</button>
+              <button class="icon ${view === "list" ? "active" : ""}" data-list-view data-index="${index}" data-view="list" title="List view">${listIconSvg()}</button>
+              <button class="icon" data-filter-toggle="${key}" title="Filter tickets">${funnelIconSvg()}</button>
+              <button class="icon danger-icon" data-remove-list data-index="${index}" title="Remove list">x</button>
+            </div>
             <div class="report-meta">
-              <select data-report-select data-index="${index}">${options}</select>
-              <select data-list-view data-index="${index}" title="List display">
-                <option value="card" ${view === "card" ? "selected" : ""}>Cards</option>
-                <option value="list" ${view === "list" ? "selected" : ""}>List</option>
-              </select>
-              <span class="api-pill" title="${escapeHtml(report.reportId)}">${listTickets.length} open</span>
+              ${state.openFilterMenu === key ? renderTicketFilterMenu(key) : ""}
             </div>
           </header>
           <div class="ticket-stack ${view === "list" ? "list-view" : "card-view"}">
-            ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets in this report.</div>`}
+            ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets in this list.</div>`}
           </div>
         </section>
       `;
+    }
+
+    function filteredTicketsForList(reportId, index) {
+      const report = reports.find(item => item.id === reportId) || reports[0];
+      const key = sectionKey(index);
+      const filter = ensureListFilter(key);
+      return tickets.filter(ticket => {
+        if (ticket.report !== report.id || !shouldShowTicketCard(ticket)) return false;
+        return Object.entries(filter.values || {}).every(([field, selected]) => {
+          if (!selected?.length) return true;
+          return selected.includes(String(ticketFilterValue(ticket, field)));
+        });
+      });
+    }
+
+    function ensureListFilter(key) {
+      if (!state.listFilters[key]) state.listFilters[key] = { name: "", values: {} };
+      if (!state.listFilters[key].values) state.listFilters[key].values = {};
+      return state.listFilters[key];
+    }
+
+    function renderTicketFilterMenu(key) {
+      const filter = ensureListFilter(key);
+      const names = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b));
+      return `
+        <div class="ticket-filter-menu">
+          <div class="filter-name-row">
+            <input data-filter-name="${key}" list="saved-filter-names-${key}" placeholder="Filter name" value="${escapeHtml(filter.name || "")}">
+            <datalist id="saved-filter-names-${key}">${names.map(name => `<option value="${escapeHtml(name)}"></option>`).join("")}</datalist>
+            <button class="icon" data-save-filter="${key}" title="Save filter">${saveIconSvg()}</button>
+          </div>
+          <select data-saved-filter-select="${key}">
+            <option value="">Apply saved filter</option>
+            ${names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
+          </select>
+          ${state.selectedListFilterFields.map(field => renderFilterFieldPicker(key, field)).join("")}
+        </div>
+      `;
+    }
+
+    function renderFilterFieldPicker(key, field) {
+      const option = listFilterFieldOptions.find(item => item.key === field) || { key: field, label: field };
+      const selected = ensureListFilter(key).values[field] || [];
+      const values = uniqueTicketValues(field);
+      return `
+        <details class="multi-dropdown filter-field-dropdown">
+          <summary>${escapeHtml(option.label)}${selected.length ? ` (${selected.length})` : ""}</summary>
+          <div class="agent-picker">
+            ${values.map(value => `
+              <label class="agent-option">
+                <input type="checkbox" data-filter-list="${key}" data-filter-field="${field}" value="${escapeHtml(value)}" ${selected.includes(value) ? "checked" : ""}>
+                <span>${escapeHtml(filterValueLabel(field, value))}</span>
+              </label>
+            `).join("") || `<div class="empty">No values yet.</div>`}
+          </div>
+        </details>
+      `;
+    }
+
+    function uniqueTicketValues(field) {
+      return Array.from(new Set(tickets.map(ticket => String(ticketFilterValue(ticket, field) || "").trim()).filter(Boolean))).sort((a, b) => filterValueLabel(field, a).localeCompare(filterValueLabel(field, b)));
+    }
+
+    function ticketFilterValue(ticket, field) {
+      if (field === "assignedTo") return ticket.assignedTo || "";
+      return ticket[field] || "";
+    }
+
+    function filterValueLabel(field, value) {
+      if (field === "assignedTo") {
+        return technicians.find(tech => String(tech.id) === String(value))?.name || (value ? `Agent ${value}` : "Unassigned");
+      }
+      return value;
+    }
+
+    function setListFilterName(key, name) {
+      ensureListFilter(key).name = name;
+      saveLocalSettings();
+      renderReportLists();
+    }
+
+    function updateListFilterValue(key, field) {
+      const selected = Array.from(document.querySelectorAll(`[data-filter-list="${key}"][data-filter-field="${field}"]:checked`)).map(input => input.value);
+      ensureListFilter(key).values[field] = selected;
+      saveLocalSettings();
+      renderReportLists();
+    }
+
+    function saveNamedFilter(key) {
+      const filter = ensureListFilter(key);
+      const input = document.querySelector(`[data-filter-name="${key}"]`);
+      if (input) filter.name = input.value.trim();
+      const name = (filter.name || "").trim();
+      if (!name) {
+        toast("Filter name needed", "Type a filter name before saving it.");
+        return;
+      }
+      state.savedFilters[name] = { name, values: structuredClone(filter.values || {}) };
+      saveLocalSettings();
+      renderDeleteFilterSelect();
+      renderReportLists();
+      toast("Filter saved", `${name} is available for other ticket lists.`);
+    }
+
+    function applySavedFilterToList(key, name) {
+      if (!name || !state.savedFilters[name]) return;
+      state.listFilters[key] = {
+        name,
+        values: structuredClone(state.savedFilters[name].values || {})
+      };
+      saveLocalSettings();
+      renderReportLists();
     }
 
     function renderTicketCard(ticket, view = "card") {
@@ -521,6 +733,7 @@ const technicians = [
       wireTechReordering();
       wireDropZones();
       wireZoneExpanders();
+      wireTechGroupToggles();
       makeTicketsDraggable();
     }
 
@@ -529,36 +742,71 @@ const technicians = [
       const allDay = visibleItems.filter(item => item.kind === "allDay");
       const noTime = visibleItems.filter(item => item.kind === "noTime");
       const timed = visibleItems.filter(item => item.kind === "timed");
+      const scheduleKey = techGroupKey(tech.id, "schedule");
+      const noTimeKey = techGroupKey(tech.id, "noTime");
+      const scheduleCollapsed = Boolean(state.collapsedTechGroups[scheduleKey]);
+      const noTimeCollapsed = Boolean(state.collapsedTechGroups[noTimeKey]);
       if (state.orientation === "vertical") {
         return `
-          <section class="tech-column" data-tech-id="${tech.id}">
+          <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}">
             <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
               <div class="tech-name">${escapeHtml(tech.name)}</div>
             </header>
             <div class="vertical-task-stack">
-              ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
-              ${renderTaskZone("noTime", tech.id, tech.name, "Tasks Without Time", noTime, "Drop ticket here to assign date only")}
+              ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Scheduled")}
+              ${scheduleCollapsed ? "" : renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
+              ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "No-Time")}
+              ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Tasks Without Time", noTime, "Drop ticket here to assign date only")}
             </div>
-            <div class="calendar" data-calendar-tech-id="${tech.id}">
-              <div class="time-axis">${renderTimeLabels()}</div>
-              <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
-            </div>
+            ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
+              <div class="calendar" data-calendar-tech-id="${tech.id}">
+                <div class="time-axis">${renderTimeLabels()}</div>
+                <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
+              </div>
+            `}
           </section>
         `;
       }
       return `
-        <section class="tech-column" data-tech-id="${tech.id}">
+        <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}">
           <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
             <div class="tech-name">${escapeHtml(tech.name)}</div>
           </header>
-          ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
-          <div class="calendar" data-calendar-tech-id="${tech.id}">
-            <div class="time-axis">${renderTimeLabels()}</div>
-            <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
-          </div>
-          ${renderTaskZone("noTime", tech.id, tech.name, "Tasks Without Time", noTime, "Drop ticket here to assign date only")}
+          ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "All-Day + Calendar")}
+          ${scheduleCollapsed ? "" : `
+            ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
+            <div class="calendar" data-calendar-tech-id="${tech.id}">
+              <div class="time-axis">${renderTimeLabels()}</div>
+              <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
+            </div>
+          `}
+          ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Tasks Without Time")}
+          ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Tasks Without Time", noTime, "Drop ticket here to assign date only")}
         </section>
       `;
+    }
+
+    function renderTechGroupToggle(techId, group, collapsed, label) {
+      return `
+        <button class="tech-group-toggle" data-tech-group-toggle="${group}" data-tech-id="${techId}" type="button">
+          <span>${escapeHtml(label)}</span><span>${collapsed ? "^" : "v"}</span>
+        </button>
+      `;
+    }
+
+    function techGroupKey(techId, group) {
+      return `${techId}:${group}`;
+    }
+
+    function wireTechGroupToggles() {
+      document.querySelectorAll("[data-tech-group-toggle]").forEach(button => {
+        button.addEventListener("click", () => {
+          const key = techGroupKey(button.dataset.techId, button.dataset.techGroupToggle);
+          state.collapsedTechGroups[key] = !state.collapsedTechGroups[key];
+          saveLocalSettings();
+          renderBoard();
+        });
+      });
     }
 
     function renderTaskZone(kind, techId, techName, label, items, emptyText) {
@@ -1341,7 +1589,9 @@ const technicians = [
         client: ticket.client || "",
         title: ticket.title || `Ticket #${id}`,
         priority: ticket.priority || "",
+        status: ticket.status || "",
         type: ticket.type || "",
+        serviceZone: ticket.serviceZone || "",
         report: "api-open",
         site: ticket.site || "",
         sla: ticket.sla || "",

@@ -255,18 +255,21 @@ function normalizeTicket(ticket, env) {
   const typeId = ticket.requesttype_id ?? ticket.tickettype_id ?? ticket.type_id ?? ticket.requesttypeid;
   const typeName = stripHtml(ticket.requesttype_name || ticket.requesttype || ticket.request_type || ticket.tickettype_name || ticket.tickettype || ticket.ticket_type || ticket.type || "");
   const customDate = customFieldValue(ticket, env.HALO_DISPATCH_DATE_FIELD_ID || "486");
+  const serviceZone = customFieldValue(ticket, "Service Zone");
   return {
     id: Number(id),
     haloTicketId: Number(id),
     client: stripHtml(ticket.client_name || ticket.client || ticket.username || ticket.customer || ""),
     title: stripHtml(ticket.summary || ticket.subject || ticket.title || `Ticket #${id}`),
     priority: stripHtml(ticket.priority || ticket.priority_name || ticket.seriousness || ""),
+    status: stripHtml(ticket.status_name || ticket.statusname || ticket.status?.name || ticket.status || ""),
     type: typeName,
     typeId: typeId ? String(typeId) : "",
     site: stripHtml(ticket.site_name || ticket.sitename || ticket.site || ""),
     sla: stripHtml(ticket.sla || ticket.sla_name || ticket.slastate || ""),
     estimate: ticket.estimatedays || ticket.estimate || "",
     contact: stripHtml(ticket.user_name || ticket.contact_name || ticket.contact || ""),
+    serviceZone: stripHtml(serviceZone || ticket.service_zone || ticket.servicezone || ""),
     details: stripHtml(ticket.details || ticket.detail || ticket.lastnote || ticket.last_note || ""),
     dateField: customDate,
     assignedTo: ticket.agent_id ? String(ticket.agent_id) : "",
@@ -390,7 +393,17 @@ function normalizeDateOnlyTicket(ticket, date, dateFieldId) {
 
 function customFieldValue(ticket, fieldId) {
   const fields = Array.isArray(ticket.customfields) ? ticket.customfields : [];
-  const match = fields.find(field => String(field.id ?? field.customfield_id ?? field.name) === String(fieldId) || field.name === "CFTaskWithoutTimeDate");
+  const wanted = String(fieldId).toLowerCase();
+  const match = fields.find(field => {
+    const candidates = [
+      field.id,
+      field.customfield_id,
+      field.name,
+      field.label,
+      field.display_name
+    ].map(value => String(value || "").toLowerCase());
+    return candidates.includes(wanted) || (wanted === "486" && field.name === "CFTaskWithoutTimeDate");
+  });
   return match?.value ?? match?.display ?? match?.text ?? "";
 }
 

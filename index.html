@@ -114,13 +114,29 @@
         </div>
       </details>
       <details class="settings-card accordion-section">
-        <summary><h3>Ticket Type Filters</h3></summary>
+        <summary><h3>Ticket Filters</h3></summary>
         <div class="field">
-          <label>Ticket Types</label>
+          <label>Included Ticket Types</label>
           <details class="multi-dropdown">
             <summary id="ticketTypeSummary">All open ticket types</summary>
             <div class="agent-picker" id="ticketTypePicker"></div>
           </details>
+        </div>
+        <div class="field">
+          <label>List Filter Fields</label>
+          <details class="multi-dropdown">
+            <summary id="listFilterFieldSummary">Select Fields</summary>
+            <div class="agent-picker" id="listFilterFieldPicker"></div>
+          </details>
+        </div>
+        <div class="field">
+          <label>Delete Saved Filters</label>
+          <div class="delete-filter-row">
+            <select id="deleteFilterSelect"></select>
+            <button class="icon danger-icon" id="deleteSavedFilterBtn" type="button" title="Delete saved filter">
+              <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M9 3h6l1 2h4v2H4V5h4l1-2Zm-2 6h10l-.7 11H7.7L7 9Zm3 2v7h2v-7h-2Zm4 0v7h2v-7h-2Z" fill="currentColor"/></svg>
+            </button>
+          </div>
         </div>
       </details>
       <details class="settings-card accordion-section">
