@@ -535,7 +535,7 @@
     }
 
     .modal.filter-modal {
-      width: min(980px, calc(100vw - 72px));
+      width: min(720px, calc(100vw - 72px));
       max-width: calc(100vw - 72px);
       overflow: visible;
     }
