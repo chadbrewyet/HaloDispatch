@@ -60,6 +60,7 @@
       min-height: 100vh;
       color: var(--ink);
       background: linear-gradient(180deg, #edf3f6 0, var(--bg) 230px);
+      font-size: 15px;
     }
 
     button, input, select, textarea {
@@ -534,7 +535,8 @@
     }
 
     .filter-modal {
-      width: min(1040px, calc(100vw - 40px));
+      width: min(980px, calc(100vw - 72px));
+      max-width: calc(100vw - 72px);
       overflow: visible;
     }
 
@@ -604,7 +606,7 @@
 
     .filter-condition-row {
       display: grid;
-      grid-template-columns: 62px 76px 160px minmax(300px, 1fr) 34px 34px;
+      grid-template-columns: 58px 72px 150px minmax(220px, 1fr) 34px 34px;
       gap: 8px;
       align-items: start;
       padding: 8px;
