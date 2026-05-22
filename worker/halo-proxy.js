@@ -175,9 +175,8 @@ async function handleCreateAppointmentFromDateOnly(payload, env) {
 
 async function handleTicketTypeLoad(payload, env) {
   const params = new URLSearchParams({
-    domain: "reqs",
-    canagentsselect: "true",
-    page_size: "500"
+    page_size: "1000",
+    count: "1000"
   });
   const haloPath = `/api/TicketType?${params.toString()}`;
   const response = await haloRequest(env, haloPath, { method: "GET" });
@@ -185,7 +184,6 @@ async function handleTicketTypeLoad(payload, env) {
   const ticketTypes = rawTypes
     .map(normalizeTicketType)
     .filter(Boolean)
-    .filter(type => !excludedTicketTypeNames.has(type.name.toLowerCase()))
     .sort((a, b) => a.name.localeCompare(b.name));
 
   return {
@@ -195,7 +193,7 @@ async function handleTicketTypeLoad(payload, env) {
       haloPath,
       rawCount: rawTypes.length,
       normalizedCount: ticketTypes.length,
-      excludedTypes: Array.from(excludedTicketTypeNames)
+      excludedTypes: []
     }
   };
 }

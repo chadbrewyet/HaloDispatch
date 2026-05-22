@@ -29,6 +29,8 @@ const technicians = [
       selectedListFilterFields: ["assignedTo", "status", "type", "serviceZone"],
       openFilterMenu: null,
       openFilterFields: {},
+      activeFilterListKey: null,
+      draftFilter: null,
       collapsedTechGroups: {},
       sectionSizes: {},
       ticketPanelPinned: false,
@@ -159,6 +161,11 @@ const technicians = [
       $("closeTicketModalBtn").addEventListener("click", closeTicketModal);
       $("ticketModalDoneBtn").addEventListener("click", closeTicketModal);
       $("ticketExternalBtn").addEventListener("click", openTicketExternal);
+      $("closeFilterModalBtn").addEventListener("click", closeFilterModal);
+      $("filterModalCancelBtn").addEventListener("click", closeFilterModal);
+      $("filterModalApplyBtn").addEventListener("click", applyFilterModal);
+      $("filterModalSaveBtn").addEventListener("click", saveFilterFromModal);
+      $("filterModalName").addEventListener("change", handleFilterNameChange);
       document.addEventListener("click", event => {
         if (!event.target.closest(".ticket-popover")) closeTicketPopover();
         closeFloatingSurfaces(event);
@@ -264,6 +271,9 @@ const technicians = [
       }
       if ($("ticketModal").classList.contains("open") && target === $("ticketModal")) {
         closeTicketModal();
+      }
+      if ($("filterModal").classList.contains("open") && target === $("filterModal")) {
+        closeFilterModal();
       }
       if ($("configDrawer").classList.contains("open") && !target.closest("#configDrawer") && !target.closest("#settingsBtn")) {
         $("configDrawer").classList.remove("open");
@@ -531,8 +541,7 @@ const technicians = [
         button.addEventListener("click", event => {
           event.stopPropagation();
           const key = button.dataset.filterToggle;
-          state.openFilterMenu = state.openFilterMenu === key ? null : key;
-          renderReportLists();
+          openFilterModal(key);
         });
       });
       $("reportLists").querySelectorAll("[data-filter-name]").forEach(input => {
@@ -614,10 +623,10 @@ const technicians = [
       const filter = ensureListFilter(key);
       return tickets.filter(ticket => {
         if (ticket.report !== report.id || !shouldShowTicketCard(ticket)) return false;
-        return Object.entries(filter.values || {}).every(([field, selected]) => {
-          if (!selected?.length) return true;
-          const hasValue = selected.includes(String(ticketFilterValue(ticket, field)));
-          return (filter.modes?.[field] || "include") === "exclude" ? !hasValue : hasValue;
+        return filterConditions(filter).every(condition => {
+          if (!condition.values?.length) return true;
+          const hasValue = condition.values.includes(String(ticketFilterValue(ticket, condition.field)));
+          return condition.mode === "exclude" ? !hasValue : hasValue;
         });
       });
     }
@@ -626,7 +635,27 @@ const technicians = [
       if (!state.listFilters[key]) state.listFilters[key] = { name: "", values: {}, modes: {} };
       if (!state.listFilters[key].values) state.listFilters[key].values = {};
       if (!state.listFilters[key].modes) state.listFilters[key].modes = {};
+      if (!Array.isArray(state.listFilters[key].conditions)) {
+        state.listFilters[key].conditions = conditionsFromLegacyFilter(state.listFilters[key]);
+      }
       return state.listFilters[key];
+    }
+
+    function filterConditions(filter) {
+      if (Array.isArray(filter.conditions)) return filter.conditions;
+      return conditionsFromLegacyFilter(filter);
+    }
+
+    function conditionsFromLegacyFilter(filter) {
+      return Object.entries(filter.values || {}).map(([field, values]) => ({
+        field,
+        mode: filter.modes?.[field] || "include",
+        values: values || []
+      }));
+    }
+
+    function defaultCondition() {
+      return { mode: "include", field: state.selectedListFilterFields[0] || "assignedTo", values: [] };
     }
 
     function renderTicketFilterMenu(key) {
@@ -646,6 +675,163 @@ const technicians = [
           ${state.selectedListFilterFields.map(field => renderFilterFieldPicker(key, field)).join("")}
         </div>
       `;
+    }
+
+    function openFilterModal(key) {
+      const filter = ensureListFilter(key);
+      state.activeFilterListKey = key;
+      state.draftFilter = {
+        name: filter.name || "",
+        conditions: structuredClone(filterConditions(filter))
+      };
+      if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
+      renderFilterModal();
+      $("filterModal").classList.add("open");
+    }
+
+    function closeFilterModal() {
+      $("filterModal").classList.remove("open");
+      state.activeFilterListKey = null;
+      state.draftFilter = null;
+    }
+
+    function renderFilterModal() {
+      if (!state.draftFilter) return;
+      $("filterModalName").value = state.draftFilter.name || "";
+      $("filterModalSavedNames").innerHTML = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b))
+        .map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
+      $("filterConditionList").innerHTML = state.draftFilter.conditions.map((condition, index) => renderFilterConditionRow(condition, index)).join("");
+      wireFilterModalRows();
+    }
+
+    function renderFilterConditionRow(condition, index) {
+      const values = uniqueTicketValues(condition.field);
+      const selected = condition.values || [];
+      const fieldOptions = listFilterFieldOptions.map(field => `<option value="${field.key}" ${field.key === condition.field ? "selected" : ""}>${escapeHtml(field.label)}</option>`).join("");
+      return `
+        <div class="filter-condition-row" data-condition-index="${index}">
+          <button class="filter-mode-toggle ${condition.mode === "exclude" ? "exclude" : ""}" data-condition-mode="${index}" type="button">${condition.mode === "exclude" ? "Exclude" : "Include"}</button>
+          <select data-condition-field="${index}">${fieldOptions}</select>
+          <details class="multi-dropdown condition-value-picker" data-condition-details="${index}" ${state.openFilterFields[`modal:${index}`] ? "open" : ""}>
+            <summary>${selected.length ? `${selected.length} selected` : "Select values"}</summary>
+            <div class="agent-picker">
+              <div class="filter-bulk-row">
+                <button type="button" data-condition-bulk="${index}" data-bulk-action="select">Select All</button>
+                <button type="button" data-condition-bulk="${index}" data-bulk-action="clear">Clear All</button>
+              </div>
+              ${values.map(value => `
+                <label class="agent-option">
+                  <input type="checkbox" data-condition-value="${index}" value="${escapeHtml(value)}" ${selected.includes(value) ? "checked" : ""}>
+                  <span>${escapeHtml(filterValueLabel(condition.field, value))}</span>
+                </label>
+              `).join("") || `<div class="empty">No values yet.</div>`}
+            </div>
+          </details>
+          <button class="icon" data-add-condition="${index}" type="button" title="Add condition">+</button>
+        </div>
+      `;
+    }
+
+    function wireFilterModalRows() {
+      $("filterConditionList").querySelectorAll("[data-condition-mode]").forEach(button => {
+        button.addEventListener("click", () => {
+          const condition = state.draftFilter.conditions[Number(button.dataset.conditionMode)];
+          condition.mode = condition.mode === "exclude" ? "include" : "exclude";
+          renderFilterModal();
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-condition-field]").forEach(select => {
+        select.addEventListener("change", () => {
+          const condition = state.draftFilter.conditions[Number(select.dataset.conditionField)];
+          condition.field = select.value;
+          condition.values = [];
+          renderFilterModal();
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-condition-value]").forEach(input => {
+        input.addEventListener("change", () => {
+          const index = Number(input.dataset.conditionValue);
+          state.draftFilter.conditions[index].values = Array.from(document.querySelectorAll(`[data-condition-value="${index}"]:checked`)).map(item => item.value);
+          state.openFilterFields[`modal:${index}`] = true;
+          renderFilterModal();
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-condition-bulk]").forEach(button => {
+        button.addEventListener("click", () => {
+          const index = Number(button.dataset.conditionBulk);
+          const condition = state.draftFilter.conditions[index];
+          condition.values = button.dataset.bulkAction === "select" ? uniqueTicketValues(condition.field) : [];
+          state.openFilterFields[`modal:${index}`] = true;
+          renderFilterModal();
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-add-condition]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.draftFilter.conditions.splice(Number(button.dataset.addCondition) + 1, 0, defaultCondition());
+          renderFilterModal();
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-condition-details]").forEach(details => {
+        details.addEventListener("toggle", () => {
+          state.openFilterFields[`modal:${details.dataset.conditionDetails}`] = details.open;
+        });
+      });
+    }
+
+    function handleFilterNameChange() {
+      if (!state.draftFilter) return;
+      const name = $("filterModalName").value.trim();
+      if (state.savedFilters[name]) {
+        state.draftFilter = {
+          name,
+          conditions: structuredClone(filterConditions(state.savedFilters[name]))
+        };
+        if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
+      } else {
+        state.draftFilter.name = name;
+      }
+      renderFilterModal();
+    }
+
+    function applyFilterModal() {
+      if (!state.activeFilterListKey || !state.draftFilter) return;
+      state.draftFilter.name = $("filterModalName").value.trim();
+      state.listFilters[state.activeFilterListKey] = normalizeFilterShape(state.draftFilter);
+      saveLocalSettings();
+      closeFilterModal();
+      renderReportLists();
+    }
+
+    function saveFilterFromModal() {
+      if (!state.draftFilter) return;
+      state.draftFilter.name = $("filterModalName").value.trim();
+      const name = state.draftFilter.name;
+      if (!name) {
+        toast("Filter name needed", "Type a filter name before saving it.");
+        return;
+      }
+      if (state.savedFilters[name] && !confirm(`Overwrite saved filter "${name}"? Choose Cancel, type a new name, and save again to save as new.`)) {
+        return;
+      }
+      state.savedFilters[name] = normalizeFilterShape(state.draftFilter);
+      renderDeleteFilterSelect();
+      saveLocalSettings();
+      toast("Filter saved", `${name} is available for ticket lists.`);
+    }
+
+    function normalizeFilterShape(filter) {
+      const normalized = {
+        name: filter.name || "",
+        conditions: structuredClone(filter.conditions || []),
+        values: {},
+        modes: {}
+      };
+      normalized.conditions.forEach(condition => {
+        if (!condition.field) return;
+        normalized.values[condition.field] = condition.values || [];
+        normalized.modes[condition.field] = condition.mode || "include";
+      });
+      return normalized;
     }
 
     function renderFilterFieldPicker(key, field) {
@@ -734,7 +920,7 @@ const technicians = [
         toast("Filter name needed", "Type a filter name before saving it.");
         return;
       }
-      state.savedFilters[name] = { name, values: structuredClone(filter.values || {}), modes: structuredClone(filter.modes || {}) };
+      state.savedFilters[name] = normalizeFilterShape(filter);
       saveLocalSettings();
       renderDeleteFilterSelect();
       renderReportLists();
@@ -746,7 +932,8 @@ const technicians = [
       state.listFilters[key] = {
         name,
         values: structuredClone(state.savedFilters[name].values || {}),
-        modes: structuredClone(state.savedFilters[name].modes || {})
+        modes: structuredClone(state.savedFilters[name].modes || {}),
+        conditions: structuredClone(filterConditions(state.savedFilters[name]))
       };
       saveLocalSettings();
       renderReportLists();

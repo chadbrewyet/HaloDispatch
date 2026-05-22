@@ -489,6 +489,50 @@
       padding: 0 6px;
     }
 
+    .filter-modal {
+      width: min(860px, calc(100vw - 56px));
+    }
+
+    .filter-builder-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: end;
+      margin-bottom: 12px;
+    }
+
+    .filter-condition-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .filter-condition-row {
+      display: grid;
+      grid-template-columns: 92px 170px minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: start;
+      padding: 8px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--panel-2);
+    }
+
+    .filter-mode-toggle {
+      font-size: 12px;
+      font-weight: 900;
+    }
+
+    .filter-mode-toggle.exclude {
+      color: var(--danger);
+      border-color: rgba(189, 77, 63, 0.45);
+      background: rgba(189, 77, 63, 0.08);
+    }
+
+    .condition-value-picker summary {
+      min-height: 34px;
+      padding: 9px;
+    }
+
     .ticket-stack {
       padding: 8px;
       min-height: 116px;
