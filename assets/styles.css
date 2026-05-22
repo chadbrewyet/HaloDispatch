@@ -606,7 +606,7 @@
 
     .filter-condition-row {
       display: grid;
-      grid-template-columns: 58px 72px 150px minmax(220px, 1fr) 34px 34px;
+      grid-template-columns: 58px 72px 150px 220px 34px 34px;
       gap: 8px;
       align-items: start;
       padding: 8px;
@@ -661,7 +661,7 @@
       left: 50%;
       right: auto;
       transform: translateX(-50%);
-      width: min(460px, calc(100vw - 56px));
+      width: min(260px, calc(100vw - 56px));
       max-height: min(300px, 46vh);
       overflow: auto;
       border: 1px solid var(--line-strong);
