@@ -407,12 +407,17 @@
 
     .report-list header {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) auto;
       gap: 8px;
       padding: 10px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
       position: relative;
+      cursor: pointer;
+    }
+
+    .report-list header > .chevron-button {
+      display: none;
     }
 
     .report-name {
@@ -491,11 +496,16 @@
 
     .filter-modal {
       width: min(860px, calc(100vw - 56px));
+      overflow: visible;
+    }
+
+    .filter-modal .modal-body {
+      overflow: visible;
     }
 
     .filter-builder-head {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
       gap: 8px;
       align-items: end;
       margin-bottom: 12px;
@@ -508,7 +518,7 @@
 
     .filter-condition-row {
       display: grid;
-      grid-template-columns: 92px 170px minmax(0, 1fr) auto;
+      grid-template-columns: 92px 170px minmax(0, 1fr) auto auto;
       gap: 8px;
       align-items: start;
       padding: 8px;
@@ -531,6 +541,25 @@
     .condition-value-picker summary {
       min-height: 34px;
       padding: 9px;
+    }
+
+    .condition-value-picker {
+      position: relative;
+    }
+
+    .condition-value-picker[open] .agent-picker {
+      position: absolute;
+      z-index: 160;
+      top: calc(100% + 4px);
+      left: 0;
+      right: 0;
+      max-height: min(320px, 48vh);
+      overflow: auto;
+      border: 1px solid var(--line-strong);
+      border-radius: 6px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+      padding: 8px;
     }
 
     .ticket-stack {

@@ -246,7 +246,7 @@
   <div class="modal-backdrop" id="filterModal">
     <div class="modal filter-modal" role="dialog" aria-modal="true" aria-labelledby="filterModalTitle">
       <div class="panel-head">
-        <h2 id="filterModalTitle">Ticket List Filter</h2>
+        <h2 id="filterModalTitle">Edit Ticket List</h2>
         <button class="icon" id="closeFilterModalBtn" title="Close filter builder">x</button>
       </div>
       <div class="modal-body">
@@ -255,6 +255,10 @@
             <label>Filter Name</label>
             <input id="filterModalName" list="filterModalSavedNames" placeholder="Type or choose a saved filter">
             <datalist id="filterModalSavedNames"></datalist>
+          </div>
+          <div class="field">
+            <label>List Title</label>
+            <input id="filterModalListTitle" placeholder="Title shown on the ticket list">
           </div>
           <button class="icon" id="filterModalSaveBtn" type="button" title="Save filter">
             <svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 4h12l2 2v14H5V4Zm2 2v5h9V6H7Zm2 9v3h6v-3H9Z" fill="currentColor"/></svg>

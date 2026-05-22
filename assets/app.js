@@ -166,6 +166,9 @@ const technicians = [
       $("filterModalApplyBtn").addEventListener("click", applyFilterModal);
       $("filterModalSaveBtn").addEventListener("click", saveFilterFromModal);
       $("filterModalName").addEventListener("change", handleFilterNameChange);
+      $("filterModalListTitle").addEventListener("input", () => {
+        if (state.draftFilter) state.draftFilter.title = $("filterModalListTitle").value;
+      });
       document.addEventListener("click", event => {
         if (!event.target.closest(".ticket-popover")) closeTicketPopover();
         closeFloatingSurfaces(event);
@@ -325,6 +328,10 @@ const technicians = [
 
     function saveIconSvg() {
       return `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 4h12l2 2v14H5V4Zm2 2v5h9V6H7Zm2 9v3h6v-3H9Z" fill="currentColor"/></svg>`;
+    }
+
+    function pencilIconSvg() {
+      return `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M17.7 3.3 20.7 6.3 8.9 18.1 4.5 19.5 5.9 15.1 17.7 3.3Zm-1.4 4.4-8.6 8.6-.4 1.4 1.4-.4 8.6-8.6-1-1Z" fill="currentColor"/></svg>`;
     }
 
     function setTicketPanelOpen(open) {
@@ -537,6 +544,15 @@ const technicians = [
           renderReportLists();
         });
       });
+      $("reportLists").querySelectorAll("[data-list-view-toggle]").forEach(button => {
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          const key = sectionKey(Number(button.dataset.index));
+          state.listViews[key] = (state.listViews[key] || "card") === "card" ? "list" : "card";
+          saveLocalSettings();
+          renderReportLists();
+        });
+      });
       $("reportLists").querySelectorAll("[data-filter-toggle]").forEach(button => {
         button.addEventListener("click", event => {
           event.stopPropagation();
@@ -577,6 +593,15 @@ const technicians = [
           renderReportLists();
         });
       });
+      $("reportLists").querySelectorAll("[data-list-header]").forEach(header => {
+        header.addEventListener("click", event => {
+          if (event.target.closest(".report-actions, button, input, select, details, a")) return;
+          const key = header.dataset.listHeader;
+          state.collapsedLists[key] = !state.collapsedLists[key];
+          saveLocalSettings();
+          renderReportLists();
+        });
+      });
       makeTicketsDraggable();
     }
 
@@ -594,16 +619,15 @@ const technicians = [
       const view = state.listViews[key] || "card";
       const collapsed = Boolean(state.collapsedLists[key]);
       const listFilter = ensureListFilter(key);
-      const title = listFilter.name || report.name;
+      const title = listFilter.title || listFilter.name || report.name;
       return `
         <section class="report-list ${collapsed ? "collapsed" : ""}">
-          <header>
+          <header data-list-header="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">
             <button class="icon chevron-button" data-list-toggle="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">${collapsed ? "⌃" : "⌄"}</button>
             <div class="report-name">${escapeHtml(title)} <span class="count-badge" title="${listTickets.length} open tickets">${listTickets.length}</span></div>
             <div class="report-actions">
-              <button class="icon ${view === "card" ? "active" : ""}" data-list-view data-index="${index}" data-view="card" title="Card view">${squareIconSvg()}</button>
-              <button class="icon ${view === "list" ? "active" : ""}" data-list-view data-index="${index}" data-view="list" title="List view">${listIconSvg()}</button>
-              <button class="icon" data-filter-toggle="${key}" title="Filter tickets">${funnelIconSvg()}</button>
+              <button class="icon" data-list-view-toggle data-index="${index}" title="${view === "card" ? "Switch to list view" : "Switch to card view"}">${view === "card" ? squareIconSvg() : listIconSvg()}</button>
+              <button class="icon" data-filter-toggle="${key}" title="Edit ticket list">${pencilIconSvg()}</button>
               <button class="icon danger-icon" data-remove-list data-index="${index}" title="Remove list">x</button>
             </div>
             <div class="report-meta">
@@ -682,6 +706,7 @@ const technicians = [
       state.activeFilterListKey = key;
       state.draftFilter = {
         name: filter.name || "",
+        title: filter.title || filter.name || "",
         conditions: structuredClone(filterConditions(filter))
       };
       if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
@@ -698,6 +723,7 @@ const technicians = [
     function renderFilterModal() {
       if (!state.draftFilter) return;
       $("filterModalName").value = state.draftFilter.name || "";
+      $("filterModalListTitle").value = state.draftFilter.title || "";
       $("filterModalSavedNames").innerHTML = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b))
         .map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
       $("filterConditionList").innerHTML = state.draftFilter.conditions.map((condition, index) => renderFilterConditionRow(condition, index)).join("");
@@ -728,6 +754,7 @@ const technicians = [
             </div>
           </details>
           <button class="icon" data-add-condition="${index}" type="button" title="Add condition">+</button>
+          ${index > 0 ? `<button class="icon danger-icon" data-delete-condition="${index}" type="button" title="Remove condition">x</button>` : ""}
         </div>
       `;
     }
@@ -771,6 +798,12 @@ const technicians = [
           renderFilterModal();
         });
       });
+      $("filterConditionList").querySelectorAll("[data-delete-condition]").forEach(button => {
+        button.addEventListener("click", () => {
+          state.draftFilter.conditions.splice(Number(button.dataset.deleteCondition), 1);
+          renderFilterModal();
+        });
+      });
       $("filterConditionList").querySelectorAll("[data-condition-details]").forEach(details => {
         details.addEventListener("toggle", () => {
           state.openFilterFields[`modal:${details.dataset.conditionDetails}`] = details.open;
@@ -784,6 +817,7 @@ const technicians = [
       if (state.savedFilters[name]) {
         state.draftFilter = {
           name,
+          title: state.savedFilters[name].title || name,
           conditions: structuredClone(filterConditions(state.savedFilters[name]))
         };
         if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
@@ -796,6 +830,7 @@ const technicians = [
     function applyFilterModal() {
       if (!state.activeFilterListKey || !state.draftFilter) return;
       state.draftFilter.name = $("filterModalName").value.trim();
+      state.draftFilter.title = $("filterModalListTitle").value.trim();
       state.listFilters[state.activeFilterListKey] = normalizeFilterShape(state.draftFilter);
       saveLocalSettings();
       closeFilterModal();
@@ -805,6 +840,7 @@ const technicians = [
     function saveFilterFromModal() {
       if (!state.draftFilter) return;
       state.draftFilter.name = $("filterModalName").value.trim();
+      state.draftFilter.title = $("filterModalListTitle").value.trim();
       const name = state.draftFilter.name;
       if (!name) {
         toast("Filter name needed", "Type a filter name before saving it.");
@@ -822,6 +858,7 @@ const technicians = [
     function normalizeFilterShape(filter) {
       const normalized = {
         name: filter.name || "",
+        title: filter.title || filter.name || "",
         conditions: structuredClone(filter.conditions || []),
         values: {},
         modes: {}
@@ -867,7 +904,14 @@ const technicians = [
     }
 
     function uniqueTicketValues(field) {
-      return Array.from(new Set(tickets.map(ticket => String(ticketFilterValue(ticket, field) || "").trim()).filter(Boolean))).sort((a, b) => filterValueLabel(field, a).localeCompare(filterValueLabel(field, b)));
+      const values = tickets.map(ticket => String(ticketFilterValue(ticket, field) || "").trim()).filter(Boolean);
+      if (field === "type") {
+        values.push(...ticketTypes.map(type => type.name).filter(Boolean));
+      }
+      if (field === "assignedTo") {
+        values.push("1", ...technicians.map(tech => String(tech.id)));
+      }
+      return Array.from(new Set(values)).sort((a, b) => filterValueLabel(field, a).localeCompare(filterValueLabel(field, b)));
     }
 
     function ticketFilterValue(ticket, field) {
