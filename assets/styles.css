@@ -428,6 +428,18 @@
       display: none;
     }
 
+    .report-list.collapsed .report-actions {
+      display: none;
+    }
+
+    .report-list.collapsed.has-new-ticket header {
+      animation: listHeaderPulse 1.7s ease-in-out infinite;
+    }
+
+    .report-list.collapsed.has-new-ticket .count-badge {
+      animation: listBadgePulse 1.7s ease-in-out infinite;
+    }
+
     .report-list header {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
@@ -437,10 +449,6 @@
       background: hsl(var(--list-hue) var(--list-sat) 94%);
       position: relative;
       cursor: pointer;
-    }
-
-    .report-list header > .chevron-button {
-      display: none;
     }
 
     .report-name {
@@ -732,6 +740,11 @@
     .ticket-card:active { cursor: grabbing; }
     .ticket-card.dragging { opacity: 0.45; }
     .ticket-card[class*="color-"] { border-left-width: 5px; }
+
+    .ticket-card.new-ticket-attention {
+      animation: newTicketAttention 1.2s ease-in-out infinite;
+      transform-origin: center;
+    }
 
     .ticket-card.list-mode {
       grid-template-columns: auto minmax(0, 1fr) auto;
@@ -1184,6 +1197,33 @@
       }
       50% {
         box-shadow: 0 0 0 5px hsl(var(--list-hue, 198) var(--list-sat, 72%) 42% / 0);
+      }
+    }
+
+    @keyframes listHeaderPulse {
+      0%, 100% {
+        background: hsl(var(--list-hue) var(--list-sat) 94%);
+      }
+      50% {
+        background: hsl(var(--list-hue) var(--list-sat) 86%);
+      }
+    }
+
+    @keyframes newTicketAttention {
+      0%, 100% {
+        transform: scale(1) rotate(0);
+      }
+      20% {
+        transform: scale(1.025) rotate(-0.6deg);
+      }
+      40% {
+        transform: scale(1.035) rotate(0.6deg);
+      }
+      60% {
+        transform: scale(1.025) rotate(-0.4deg);
+      }
+      80% {
+        transform: scale(1.015) rotate(0.4deg);
       }
     }
 

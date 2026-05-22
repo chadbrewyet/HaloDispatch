@@ -10,6 +10,8 @@ const technicians = [
 
     const tickets = [];
     const ticketTypes = [];
+    const knownTicketIds = new Set();
+    const attentionTicketIds = new Set();
 
     const state = {
       selectedTeams: [],
@@ -638,6 +640,7 @@ const technicians = [
         return;
       }
       const counts = state.reportLists.map((reportId, index) => filteredTicketsForList(reportId, index).length);
+      ensureTicketListAccordion();
       const expandedCount = state.reportLists.filter((reportId, index) => !state.collapsedLists[sectionKey(index)]).length;
       $("reportLists").className = `report-lists expanded-count-${Math.min(expandedCount, 3)}`;
       $("reportLists").innerHTML = state.reportLists.map((reportId, index) => renderReportList(reportId, index)).join("");
@@ -697,20 +700,11 @@ const technicians = [
           saveLocalSettings();
         });
       });
-      $("reportLists").querySelectorAll("[data-list-toggle]").forEach(toggle => {
-        toggle.addEventListener("click", event => {
-          event.preventDefault();
-          const key = toggle.dataset.listToggle;
-          state.collapsedLists[key] = !state.collapsedLists[key];
-          saveLocalSettings();
-          renderReportLists();
-        });
-      });
       $("reportLists").querySelectorAll("[data-list-header]").forEach(header => {
         header.addEventListener("click", event => {
           if (event.target.closest(".report-actions, button, input, select, details, a")) return;
           const key = header.dataset.listHeader;
-          state.collapsedLists[key] = !state.collapsedLists[key];
+          setExpandedTicketList(key, Boolean(state.collapsedLists[key]));
           saveLocalSettings();
           renderReportLists();
         });
@@ -725,6 +719,22 @@ const technicians = [
       `).join("");
     }
 
+    function ensureTicketListAccordion() {
+      const openKeys = state.reportLists
+        .map((reportId, index) => sectionKey(index))
+        .filter(key => !state.collapsedLists[key]);
+      openKeys.slice(1).forEach(key => {
+        state.collapsedLists[key] = true;
+      });
+    }
+
+    function setExpandedTicketList(key, expand) {
+      state.reportLists.forEach((reportId, index) => {
+        state.collapsedLists[sectionKey(index)] = true;
+      });
+      if (expand) state.collapsedLists[key] = false;
+    }
+
     function renderReportList(reportId, index) {
       const report = reports.find(item => item.id === reportId) || reports[0];
       const listTickets = filteredTicketsForList(reportId, index);
@@ -734,10 +744,10 @@ const technicians = [
       const listFilter = ensureListFilter(key);
       const title = listFilter.title || listFilter.name || report.name;
       const themeStyle = listThemeStyle(listFilter.color);
+      const hasAttention = listTickets.some(ticket => attentionTicketIds.has(Number(ticket.id)));
       return `
-        <section class="report-list ${collapsed ? "collapsed" : ""}" ${themeStyle}>
+        <section class="report-list ${collapsed ? "collapsed" : ""} ${hasAttention ? "has-new-ticket" : ""}" ${themeStyle}>
           <header data-list-header="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">
-            <button class="icon chevron-button" data-list-toggle="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">${collapsed ? "⌃" : "⌄"}</button>
             <div class="report-name">${escapeHtml(title)} <span class="count-badge" title="${listTickets.length} open tickets">${listTickets.length}</span></div>
             <div class="report-actions">
               <button class="icon" data-list-view-toggle data-index="${index}" title="${view === "card" ? "Switch to list view" : "Switch to card view"}">${view === "card" ? squareIconSvg() : listIconSvg()}</button>
@@ -749,7 +759,7 @@ const technicians = [
             </div>
           </header>
           <div class="ticket-stack ${view === "list" ? "list-view" : "card-view"}">
-            ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view)).join("") : `<div class="empty">No tickets in this list.</div>`}
+            ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view, !collapsed)).join("") : `<div class="empty">No tickets in this list.</div>`}
           </div>
         </section>
       `;
@@ -1208,13 +1218,14 @@ const technicians = [
       renderReportLists();
     }
 
-    function renderTicketCard(ticket, view = "card") {
+    function renderTicketCard(ticket, view = "card", listExpanded = true) {
       const visible = state.visibleFields.map(field => {
         if (!ticket[field]) return "";
         return `<div class="ticket-line"><span>${labelFor(field)}</span><strong>${escapeHtml(ticket[field])}</strong></div>`;
       }).join("");
+      const attentionClass = listExpanded && attentionTicketIds.has(Number(ticket.id)) ? "new-ticket-attention" : "";
       return `
-        <article class="ticket-card ${ticketColorClass(ticket)} ${view === "list" ? "list-mode" : ""}" draggable="true" data-ticket-id="${ticket.id}" data-drag-source="ticket">
+        <article class="ticket-card ${ticketColorClass(ticket)} ${view === "list" ? "list-mode" : ""} ${attentionClass}" draggable="true" data-ticket-id="${ticket.id}" data-drag-source="ticket">
           <div class="ticket-top">
             <span class="ticket-id">#${ticket.id}</span>
             <span class="priority ${ticket.priority.toLowerCase()}">${ticket.priority}</span>
@@ -1695,22 +1706,37 @@ const technicians = [
     function makeTicketsDraggable() {
       document.querySelectorAll(".ticket-card, .appointment, .small-event").forEach(card => {
         card.addEventListener("dragstart", event => {
+          clearTicketAttention(Number(card.dataset.ticketId), { render: false });
           card.classList.add("dragging");
           event.dataTransfer.setData("text/plain", card.dataset.ticketId);
           event.dataTransfer.setData("source", card.dataset.dragSource || "ticket");
+        });
+        card.addEventListener("click", () => {
+          clearTicketAttention(Number(card.dataset.ticketId), { render: false });
+          card.classList.remove("new-ticket-attention");
         });
         card.addEventListener("dragend", () => card.classList.remove("dragging"));
         card.addEventListener("contextmenu", event => {
           event.preventDefault();
           event.stopPropagation();
+          clearTicketAttention(Number(card.dataset.ticketId), { render: false });
+          card.classList.remove("new-ticket-attention");
           showTicketPopover(Number(card.dataset.ticketId), event.clientX, event.clientY);
         });
         card.addEventListener("dblclick", event => {
           event.preventDefault();
           event.stopPropagation();
+          clearTicketAttention(Number(card.dataset.ticketId), { render: false });
+          card.classList.remove("new-ticket-attention");
           openTicketExternal(Number(card.dataset.ticketId));
         });
       });
+    }
+
+    function clearTicketAttention(ticketId, options = {}) {
+      if (!attentionTicketIds.delete(Number(ticketId))) return;
+      if (options.render === false) return;
+      renderReportLists();
     }
 
     function handleTicketDrop(ticketId, techId, kind, time, source = "ticket") {
@@ -1991,6 +2017,7 @@ const technicians = [
       }
       const next = reports.find(report => !state.reportLists.includes(report.id)) || reports[0];
       state.reportLists.push(next.id);
+      setExpandedTicketList(sectionKey(state.reportLists.length - 1), true);
       resetReportListHeights();
       saveLocalSettings();
       renderReportLists();
@@ -2109,12 +2136,17 @@ const technicians = [
     }
 
     function syncHaloTickets(loadedTickets) {
+      const hadKnownTickets = knownTicketIds.size > 0 || tickets.some(ticket => ticket.source === "haloTicket");
       for (let index = tickets.length - 1; index >= 0; index -= 1) {
         if (tickets[index].source === "haloTicket") tickets.splice(index, 1);
       }
       loadedTickets.forEach(ticket => {
         const normalized = normalizeHaloTicket(ticket);
         if (!normalized) return;
+        if (hadKnownTickets && !knownTicketIds.has(Number(normalized.id))) {
+          attentionTicketIds.add(Number(normalized.id));
+        }
+        knownTicketIds.add(Number(normalized.id));
         const existing = tickets.find(item => item.id === normalized.id);
         if (existing) {
           Object.assign(existing, normalized, {
