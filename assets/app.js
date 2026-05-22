@@ -48,6 +48,8 @@ const technicians = [
       apiProxyUrl: "",
       appointmentRefreshMinutes: 5,
       appointmentRefreshTimer: null,
+      ticketRefreshMinutes: 2,
+      ticketRefreshTimer: null,
       currentTimeTimer: null,
       shouldCenterNow: true,
       calendarScroll: {},
@@ -102,6 +104,7 @@ const technicians = [
       wireSectionResizers();
       bindEvents();
       resetAppointmentRefreshTimer();
+      resetTicketRefreshTimer();
       resetCurrentTimeTimer();
       toast("Ready", "Dispatch board loaded. HaloPSA actions run in mock mode until a Worker API URL is saved.");
       loadHaloTechnicians();
@@ -170,6 +173,11 @@ const technicians = [
         saveLocalSettings();
         resetAppointmentRefreshTimer();
       });
+      $("ticketRefreshSelect").addEventListener("change", () => {
+        state.ticketRefreshMinutes = Number($("ticketRefreshSelect").value);
+        saveLocalSettings();
+        resetTicketRefreshTimer();
+      });
       $("refreshBtn").addEventListener("click", refreshReports);
       $("deleteSavedFilterBtn").addEventListener("click", deleteSelectedSavedFilter);
       $("closeModalBtn").addEventListener("click", closeAppointmentModal);
@@ -237,10 +245,14 @@ const technicians = [
         if (saved.appointmentRefreshMinutes !== undefined) {
           state.appointmentRefreshMinutes = Number(saved.appointmentRefreshMinutes);
         }
+        if (saved.ticketRefreshMinutes !== undefined) {
+          state.ticketRefreshMinutes = Number(saved.ticketRefreshMinutes);
+        }
         if (Array.isArray(saved.selectedTicketTypes)) state.selectedTicketTypes = saved.selectedTicketTypes.map(String);
         if (saved.selectionDefaultsVersion >= 1 && Array.isArray(saved.selectedTeams)) state.selectedTeams = saved.selectedTeams.map(String);
         if (saved.selectionDefaultsVersion >= 1 && Array.isArray(saved.selectedTechs)) state.selectedTechs = saved.selectedTechs.map(String);
         $("appointmentRefreshSelect").value = String(state.appointmentRefreshMinutes);
+        $("ticketRefreshSelect").value = String(state.ticketRefreshMinutes);
         if (saved.apiBaseUrl) state.apiBaseUrl = saved.apiBaseUrl;
         $("apiBaseUrl").value = state.apiBaseUrl;
         if (saved.apiProxyUrl) {
@@ -277,6 +289,7 @@ const technicians = [
         apiBaseUrl: state.apiBaseUrl,
         apiProxyUrl: state.apiProxyUrl,
         appointmentRefreshMinutes: state.appointmentRefreshMinutes,
+        ticketRefreshMinutes: state.ticketRefreshMinutes,
         selectedTeams: state.selectedTeams,
         selectedTechs: state.selectedTechs,
         selectedTicketTypes: state.selectedTicketTypes,
@@ -2079,6 +2092,7 @@ const technicians = [
       $("apiState").textContent = state.apiProxyUrl ? "HaloPSA Worker connected" : "HaloPSA mock mode";
       saveLocalSettings();
       resetAppointmentRefreshTimer();
+      resetTicketRefreshTimer();
       toast("Connection settings saved", state.apiProxyUrl || "Mock mode remains active until the Worker URL is added.");
       loadHaloTechnicians();
       loadHaloTicketTypes();
@@ -2229,6 +2243,18 @@ const technicians = [
       state.appointmentRefreshTimer = setInterval(() => {
         loadHaloAppointments({ quiet: true });
       }, state.appointmentRefreshMinutes * 60000);
+    }
+
+    function resetTicketRefreshTimer() {
+      if (state.ticketRefreshTimer) {
+        clearInterval(state.ticketRefreshTimer);
+        state.ticketRefreshTimer = null;
+      }
+      if (!state.ticketRefreshMinutes || state.ticketRefreshMinutes < 1) return;
+
+      state.ticketRefreshTimer = setInterval(() => {
+        loadHaloTickets({ quiet: true });
+      }, state.ticketRefreshMinutes * 60000);
     }
 
     function resetCurrentTimeTimer() {
