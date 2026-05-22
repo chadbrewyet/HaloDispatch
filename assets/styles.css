@@ -270,14 +270,20 @@
       transition: transform 0.2s ease, opacity 0.2s ease;
       background: var(--panel);
       border-right: 1px solid var(--line);
+      cursor: pointer;
     }
 
-    .ticket-panel-tab > span:nth-child(2) {
+    .ticket-panel-tab > span:first-child {
       writing-mode: vertical-rl;
       text-transform: uppercase;
       font-size: 12px;
       font-weight: 900;
       line-height: 1;
+    }
+
+    .ticket-panel-tab:hover {
+      border-right-color: var(--accent);
+      color: var(--accent);
     }
 
     body.ticket-panel-open .ticket-panel-tab,
@@ -367,6 +373,14 @@
       padding: 12px 14px;
       border-bottom: 1px solid var(--line);
       background: linear-gradient(90deg, var(--ticket-band), var(--panel));
+    }
+
+    .ticket-drawer-head {
+      cursor: pointer;
+    }
+
+    .ticket-drawer-head:hover h2 {
+      color: var(--accent);
     }
 
     .panel-head h2, .section-title h3 {

@@ -111,8 +111,14 @@ const technicians = [
 
     function bindEvents() {
       $("addListBtn").addEventListener("click", addReportList);
-      $("ticketPanelToggle").addEventListener("click", () => setTicketPanelOpen(true));
-      $("ticketPanelCollapseBtn").addEventListener("click", () => {
+      $("ticketPanelTab").addEventListener("click", () => setTicketPanelOpen(true));
+      $("ticketPanelTab").addEventListener("keydown", event => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        setTicketPanelOpen(true);
+      });
+      $("ticketPanelHeader").addEventListener("click", event => {
+        if (event.target.closest(".panel-actions, button")) return;
         state.ticketPanelPinned = false;
         setTicketPanelOpen(false);
         saveLocalSettings();
@@ -367,7 +373,7 @@ const technicians = [
         state.openFilterMenu = null;
         renderReportLists();
       }
-      if (state.ticketPanelOpen && !state.ticketPanelPinned && !clickedInTicketPanel && !target.closest("#ticketPanelToggle")) {
+      if (state.ticketPanelOpen && !state.ticketPanelPinned && !clickedInTicketPanel && !target.closest("#ticketPanelTab")) {
         setTicketPanelOpen(false);
       }
       if ($("zoneModal").classList.contains("open") && !target.closest("#zoneModal") && !target.closest("[data-expand-zone]")) {

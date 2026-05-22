@@ -36,8 +36,7 @@
       </div>
     </header>
 
-    <div class="ticket-panel-tab" title="Service tickets">
-      <button class="icon chevron-button" id="ticketPanelToggle" title="Show service tickets">›</button>
+    <div class="ticket-panel-tab" id="ticketPanelTab" title="Show service tickets" role="button" tabindex="0" aria-label="Show service tickets">
       <span>Service Tickets</span>
       <span class="ticket-panel-badges" id="ticketPanelBadges"></span>
     </div>
@@ -45,8 +44,7 @@
     <main class="workspace">
       <aside class="left-panel">
         <div class="side-resizer" id="ticketPanelResizer" title="Drag to resize ticket panel"></div>
-        <div class="panel-head">
-          <button class="icon chevron-button" id="ticketPanelCollapseBtn" title="Collapse service tickets">‹</button>
+        <div class="panel-head ticket-drawer-head" id="ticketPanelHeader" title="Collapse service tickets">
           <h2>Service Tickets</h2>
           <div class="panel-actions">
             <button class="icon pin-button" id="pinTicketPanelBtn" title="Pin ticket panel" aria-label="Pin ticket panel"></button>
