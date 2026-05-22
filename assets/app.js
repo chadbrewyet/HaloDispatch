@@ -26,7 +26,7 @@ const technicians = [
       collapsedLists: {},
       listFilters: {},
       savedFilters: {},
-      selectedListFilterFields: ["assignedTo", "status", "type", "serviceZone"],
+      selectedListFilterFields: ["assignedTo", "team", "status", "type", "serviceZone"],
       openFilterMenu: null,
       openFilterFields: {},
       activeFilterListKey: null,
@@ -59,6 +59,7 @@ const technicians = [
 
     const listFilterFieldOptions = [
       { key: "assignedTo", label: "Tech Assigned" },
+      { key: "team", label: "Team" },
       { key: "status", label: "Status" },
       { key: "type", label: "Ticket Type" },
       { key: "serviceZone", label: "Service Zone" },
@@ -169,6 +170,9 @@ const technicians = [
       $("filterModalListTitle").addEventListener("input", () => {
         if (state.draftFilter) state.draftFilter.title = $("filterModalListTitle").value;
       });
+      $("filterModalColor").addEventListener("input", () => {
+        if (state.draftFilter) state.draftFilter.color = $("filterModalColor").value;
+      });
       document.addEventListener("click", event => {
         if (!event.target.closest(".ticket-popover")) closeTicketPopover();
         closeFloatingSurfaces(event);
@@ -192,6 +196,7 @@ const technicians = [
           state.theme = saved.theme;
           $("themeSelect").value = saved.theme;
         }
+        if (Array.isArray(saved.reportLists) && saved.reportLists.length) state.reportLists = saved.reportLists;
         if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
         if (saved.collapsedLists) state.collapsedLists = saved.collapsedLists;
         if (saved.listFilters) state.listFilters = saved.listFilters;
@@ -228,6 +233,7 @@ const technicians = [
         colorBy: state.colorBy,
         show24Hours: state.show24Hours,
         theme: state.theme,
+        reportLists: state.reportLists,
         listViews: state.listViews,
         collapsedLists: state.collapsedLists,
         listFilters: state.listFilters,
@@ -534,6 +540,7 @@ const technicians = [
         button.addEventListener("click", () => {
           state.reportLists.splice(Number(button.dataset.index), 1);
           resetReportListHeights();
+          saveLocalSettings();
           renderReportLists();
         });
       });
@@ -620,8 +627,9 @@ const technicians = [
       const collapsed = Boolean(state.collapsedLists[key]);
       const listFilter = ensureListFilter(key);
       const title = listFilter.title || listFilter.name || report.name;
+      const themeStyle = listThemeStyle(listFilter.color);
       return `
-        <section class="report-list ${collapsed ? "collapsed" : ""}">
+        <section class="report-list ${collapsed ? "collapsed" : ""}" ${themeStyle}>
           <header data-list-header="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">
             <button class="icon chevron-button" data-list-toggle="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">${collapsed ? "⌃" : "⌄"}</button>
             <div class="report-name">${escapeHtml(title)} <span class="count-badge" title="${listTickets.length} open tickets">${listTickets.length}</span></div>
@@ -682,6 +690,32 @@ const technicians = [
       return { mode: "include", field: state.selectedListFilterFields[0] || "assignedTo", values: [] };
     }
 
+    function listThemeStyle(color = "#1976a3") {
+      const hsl = hexToHsl(color);
+      return `style="--list-hue:${hsl.h};--list-sat:${hsl.s}%;--list-light:${hsl.l}%;"`;
+    }
+
+    function hexToHsl(hex) {
+      const normalized = /^#[0-9a-f]{6}$/i.test(hex || "") ? hex : "#1976a3";
+      const r = parseInt(normalized.slice(1, 3), 16) / 255;
+      const g = parseInt(normalized.slice(3, 5), 16) / 255;
+      const b = parseInt(normalized.slice(5, 7), 16) / 255;
+      const max = Math.max(r, g, b);
+      const min = Math.min(r, g, b);
+      let h = 0;
+      let s = 0;
+      const l = (max + min) / 2;
+      if (max !== min) {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        if (max === r) h = ((g - b) / d) + (g < b ? 6 : 0);
+        else if (max === g) h = ((b - r) / d) + 2;
+        else h = ((r - g) / d) + 4;
+        h /= 6;
+      }
+      return { h: Math.round(h * 360), s: Math.round(s * 100), l: Math.round(l * 100) };
+    }
+
     function renderTicketFilterMenu(key) {
       const filter = ensureListFilter(key);
       const names = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b));
@@ -707,6 +741,7 @@ const technicians = [
       state.draftFilter = {
         name: filter.name || "",
         title: filter.title || filter.name || "",
+        color: filter.color || "#1976a3",
         conditions: structuredClone(filterConditions(filter))
       };
       if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
@@ -724,6 +759,7 @@ const technicians = [
       if (!state.draftFilter) return;
       $("filterModalName").value = state.draftFilter.name || "";
       $("filterModalListTitle").value = state.draftFilter.title || "";
+      $("filterModalColor").value = state.draftFilter.color || "#1976a3";
       $("filterModalSavedNames").innerHTML = Object.keys(state.savedFilters).sort((a, b) => a.localeCompare(b))
         .map(name => `<option value="${escapeHtml(name)}"></option>`).join("");
       $("filterConditionList").innerHTML = state.draftFilter.conditions.map((condition, index) => renderFilterConditionRow(condition, index)).join("");
@@ -818,6 +854,7 @@ const technicians = [
         state.draftFilter = {
           name,
           title: state.savedFilters[name].title || name,
+          color: state.savedFilters[name].color || "#1976a3",
           conditions: structuredClone(filterConditions(state.savedFilters[name]))
         };
         if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
@@ -831,6 +868,7 @@ const technicians = [
       if (!state.activeFilterListKey || !state.draftFilter) return;
       state.draftFilter.name = $("filterModalName").value.trim();
       state.draftFilter.title = $("filterModalListTitle").value.trim();
+      state.draftFilter.color = $("filterModalColor").value;
       state.listFilters[state.activeFilterListKey] = normalizeFilterShape(state.draftFilter);
       saveLocalSettings();
       closeFilterModal();
@@ -841,6 +879,7 @@ const technicians = [
       if (!state.draftFilter) return;
       state.draftFilter.name = $("filterModalName").value.trim();
       state.draftFilter.title = $("filterModalListTitle").value.trim();
+      state.draftFilter.color = $("filterModalColor").value;
       const name = state.draftFilter.name;
       if (!name) {
         toast("Filter name needed", "Type a filter name before saving it.");
@@ -859,6 +898,7 @@ const technicians = [
       const normalized = {
         name: filter.name || "",
         title: filter.title || filter.name || "",
+        color: filter.color || "#1976a3",
         conditions: structuredClone(filter.conditions || []),
         values: {},
         modes: {}
@@ -911,11 +951,17 @@ const technicians = [
       if (field === "assignedTo") {
         values.push("1", ...technicians.map(tech => String(tech.id)));
       }
+      if (field === "team") {
+        values.push(...teams.map(team => String(team.id)));
+      }
       return Array.from(new Set(values)).sort((a, b) => filterValueLabel(field, a).localeCompare(filterValueLabel(field, b)));
     }
 
     function ticketFilterValue(ticket, field) {
       if (field === "assignedTo") return ticket.assignedTo || "";
+      if (field === "team") {
+        return ticket.teamId || technicians.find(tech => String(tech.id) === String(ticket.assignedTo))?.teamId || "";
+      }
       return ticket[field] || "";
     }
 
@@ -923,6 +969,9 @@ const technicians = [
       if (field === "assignedTo") {
         if (String(value) === "1") return "Unassigned";
         return technicians.find(tech => String(tech.id) === String(value))?.name || (value ? `Agent ${value}` : "Unassigned");
+      }
+      if (field === "team") {
+        return teams.find(team => String(team.id) === String(value))?.name || (value ? `Team ${value}` : "No Team");
       }
       return value;
     }
@@ -1724,6 +1773,7 @@ const technicians = [
       const next = reports.find(report => !state.reportLists.includes(report.id)) || reports[0];
       state.reportLists.push(next.id);
       resetReportListHeights();
+      saveLocalSettings();
       renderReportLists();
     }
 
@@ -1869,6 +1919,7 @@ const technicians = [
         priority: ticket.priority || "",
         status: ticket.status || "",
         type: ticket.type || "",
+        teamId: ticket.teamId || technicians.find(tech => String(tech.id) === String(ticket.assignedTo))?.teamId || "",
         serviceZone: ticket.serviceZone || "",
         report: "api-open",
         site: ticket.site || "",

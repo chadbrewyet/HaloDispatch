@@ -68,7 +68,7 @@
 
     button {
       border: 1px solid var(--line-strong);
-      background: var(--panel);
+      background: hsl(var(--list-hue) var(--list-sat) 98%);
       color: var(--ink);
       border-radius: 6px;
       min-height: 34px;
@@ -367,8 +367,11 @@
     }
 
     .report-list {
+      --list-hue: 198;
+      --list-sat: 73%;
+      --list-light: 37%;
       background: var(--panel);
-      border: 1px solid var(--line);
+      border: 1px solid hsl(var(--list-hue) var(--list-sat) 58%);
       border-radius: var(--radius);
       overflow: hidden;
       min-height: 220px;
@@ -411,7 +414,7 @@
       gap: 8px;
       padding: 10px;
       border-bottom: 1px solid var(--line);
-      background: var(--panel);
+      background: hsl(var(--list-hue) var(--list-sat) 94%);
       position: relative;
       cursor: pointer;
     }
@@ -438,7 +441,7 @@
       border-radius: 999px;
       display: inline-grid;
       place-items: center;
-      background: var(--accent);
+      background: hsl(var(--list-hue) var(--list-sat) 38%);
       color: #fff;
       font-size: 11px;
       font-weight: 900;
@@ -448,6 +451,42 @@
       display: inline-flex;
       align-items: center;
       gap: 4px;
+    }
+
+    .report-actions button {
+      border-color: hsl(var(--list-hue) var(--list-sat) 62%);
+      background: hsl(var(--list-hue) var(--list-sat) 97%);
+    }
+
+    .report-actions button:hover {
+      border-color: hsl(var(--list-hue) var(--list-sat) 42%);
+      color: hsl(var(--list-hue) var(--list-sat) 32%);
+    }
+
+    .report-list .ticket-stack {
+      background: hsl(var(--list-hue) var(--list-sat) 97%);
+    }
+
+    body[data-theme="dark"] .report-list {
+      background: hsl(var(--list-hue) 34% 13%);
+      border-color: hsl(var(--list-hue) 42% 30%);
+    }
+
+    body[data-theme="dark"] .report-list header {
+      background: hsl(var(--list-hue) 34% 17%);
+    }
+
+    body[data-theme="dark"] .report-list .ticket-stack {
+      background: hsl(var(--list-hue) 28% 12%);
+    }
+
+    body[data-theme="dark"] .report-actions button {
+      border-color: hsl(var(--list-hue) 35% 34%);
+      background: hsl(var(--list-hue) 28% 16%);
+    }
+
+    body[data-theme="dark"] .count-badge {
+      background: hsl(var(--list-hue) var(--list-sat) 42%);
     }
 
     .report-meta {
@@ -499,13 +538,17 @@
       overflow: visible;
     }
 
+    #filterModal {
+      overflow: visible;
+    }
+
     .filter-modal .modal-body {
       overflow: visible;
     }
 
     .filter-builder-head {
       display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 96px auto;
       gap: 8px;
       align-items: end;
       margin-bottom: 12px;
@@ -548,11 +591,13 @@
     }
 
     .condition-value-picker[open] .agent-picker {
-      position: absolute;
-      z-index: 160;
-      top: calc(100% + 4px);
-      left: 0;
-      right: 0;
+      position: fixed;
+      z-index: 300;
+      top: 34vh;
+      left: 50%;
+      right: auto;
+      transform: translateX(-50%);
+      width: min(560px, calc(100vw - 56px));
       max-height: min(320px, 48vh);
       overflow: auto;
       border: 1px solid var(--line-strong);
