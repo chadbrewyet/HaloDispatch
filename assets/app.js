@@ -1239,6 +1239,7 @@ const technicians = [
 
     function renderTechColumn(tech) {
       const visibleItems = state.boardItems.filter(item => String(item.techId) === String(tech.id) && isSelectedDate(item.date));
+      const pastNoTime = state.boardItems.filter(item => String(item.techId) === String(tech.id) && item.kind === "pastNoTime" && String(item.date || "") < selectedDate());
       const allDay = visibleItems.filter(item => item.kind === "allDay");
       const noTime = visibleItems.filter(item => item.kind === "noTime");
       const timed = visibleItems.filter(item => item.kind === "timed");
@@ -1260,6 +1261,7 @@ const technicians = [
               ${scheduleCollapsed ? "" : renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
               ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks")}
               ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
+              ${pastNoTime.length ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
             </div>
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
               <div class="calendar" data-calendar-tech-id="${tech.id}">
@@ -1287,6 +1289,7 @@ const technicians = [
           `}
           ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks")}
           ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
+          ${pastNoTime.length ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
         </section>
       `;
     }
@@ -1361,6 +1364,19 @@ const technicians = [
             <button class="expand-zone" data-expand-zone type="button" title="Expand section">^</button>
           </div>
           <div class="zone-items">${items.length ? items.map(renderSmallEvent).join("") : `<div class="empty">${emptyText}</div>`}</div>
+        </div>
+      `;
+    }
+
+    function renderPastTaskZone(techId, techName, items) {
+      return `
+        <div class="drop-zone past-task-zone" data-past-task-zone="${techId}">
+          <div class="expanded-title">Past Tasks - ${escapeHtml(techName)}</div>
+          <div class="zone-topline">
+            <div class="zone-label">Past Tasks</div>
+            <button class="expand-zone" data-expand-zone type="button" title="Expand section">^</button>
+          </div>
+          <div class="zone-items">${items.map(renderSmallEvent).join("")}</div>
         </div>
       `;
     }
@@ -2165,10 +2181,11 @@ const technicians = [
       }, { quiet: true });
       console.log("HaloPSA date-only task load result", result?.meta || result);
       if (!result?.ok) return;
-      syncHaloDateOnlyTasks(result.data?.tasks || []);
+      syncHaloDateOnlyTasks(result.data?.tasks || [], result.data?.pastTasks || []);
       renderBoard();
-      if (!options.quiet && result.data?.tasks?.length) {
-        toast("Date-only tasks loaded", `${result.data.tasks.length} without-time tickets matched this view.`);
+      const taskCount = (result.data?.tasks?.length || 0) + (result.data?.pastTasks?.length || 0);
+      if (!options.quiet && taskCount) {
+        toast("Date-only tasks loaded", `${taskCount} without-time tickets matched this view.`);
       }
     }
 
@@ -2186,16 +2203,20 @@ const technicians = [
       });
     }
 
-    function syncHaloDateOnlyTasks(tasks) {
+    function syncHaloDateOnlyTasks(tasks, pastTasks = []) {
       const visibleTechs = new Set(state.selectedTechs);
       state.boardItems = state.boardItems.filter(item => {
-        const sameDate = isSelectedDate(item.date);
+        const dateValue = String(item.date || "").slice(0, 10);
+        const relevantDateOnlyDate = isSelectedDate(dateValue) || dateValue < selectedDate();
         const sameTech = visibleTechs.has(String(item.techId));
-        return (item.source !== "haloDateOnly" && item.kind !== "noTime") || !sameDate || !sameTech;
+        const dateOnlyKind = item.kind === "noTime" || item.kind === "pastNoTime";
+        return (item.source !== "haloDateOnly" && !dateOnlyKind) || !relevantDateOnlyDate || !sameTech;
       });
 
       const seen = new Set();
-      tasks.filter(task => !task.completed).forEach(task => {
+      const currentTasks = tasks.map(task => ({ ...task, kind: "noTime" }));
+      const olderTasks = pastTasks.map(task => ({ ...task, kind: "pastNoTime" }));
+      [...currentTasks, ...olderTasks].filter(task => !task.completed).forEach(task => {
         const key = `${task.ticketId}:${task.techId}:${task.date}`;
         if (seen.has(key)) return;
         seen.add(key);

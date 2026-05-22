@@ -364,28 +364,31 @@ async function handleDateOnlyTaskLoad(payload, env) {
   console.log("loadDateOnlyTasks request", JSON.stringify({ date, agentIds, haloPath }));
   const response = await haloRequest(env, haloPath, { method: "GET" });
   const rawTickets = unwrapList(response.data);
-  const tasks = rawTickets
-    .map(ticket => normalizeDateOnlyTicket(ticket, date, dateFieldId))
+  const normalizedTasks = rawTickets
+    .map(ticket => normalizeDateOnlyTicket(ticket, dateFieldId))
     .filter(Boolean)
     .filter(task => !task.completed)
     .filter(task => agentIds.includes(String(task.techId)));
+  const tasks = normalizedTasks.filter(task => task.date === date);
+  const pastTasks = normalizedTasks.filter(task => task.date && task.date < date);
 
   return {
     ok: true,
-    data: { tasks },
+    data: { tasks, pastTasks },
     meta: {
       haloPath,
       rawCount: rawTickets.length,
-      normalizedCount: tasks.length
+      normalizedCount: tasks.length,
+      pastCount: pastTasks.length
     }
   };
 }
 
-function normalizeDateOnlyTicket(ticket, date, dateFieldId) {
+function normalizeDateOnlyTicket(ticket, dateFieldId) {
   const ticketId = ticket.id ?? ticket.faultid ?? ticket.fault_id;
   const techId = ticket.agent_id ?? ticket.agentid ?? ticket.assigned_agent_id;
-  const customDate = customFieldValue(ticket, dateFieldId);
-  if (!ticketId || !techId || String(customDate || "").slice(0, 10) !== date) return null;
+  const date = String(customFieldValue(ticket, dateFieldId) || "").slice(0, 10);
+  if (!ticketId || !techId || !date) return null;
 
   return {
     ticketId: Number(ticketId),

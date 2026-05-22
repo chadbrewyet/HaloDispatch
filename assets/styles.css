@@ -999,6 +999,11 @@
       overflow: auto;
     }
 
+    .past-task-zone {
+      background: color-mix(in srgb, var(--warning) 8%, var(--panel));
+      border-top: 1px solid color-mix(in srgb, var(--warning) 28%, var(--line));
+    }
+
     .board.vertical .drop-zone {
       max-height: none;
       min-height: 0;
@@ -1008,6 +1013,8 @@
       min-height: 0;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr) auto minmax(0, 1fr);
+      grid-auto-rows: auto;
+      overflow: auto;
       border-right: 1px solid var(--line);
       background: var(--panel);
     }
