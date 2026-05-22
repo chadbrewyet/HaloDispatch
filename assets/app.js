@@ -144,13 +144,14 @@ const technicians = [
         saveLocalSettings();
         renderAll();
       });
-      $("themeSelect").addEventListener("change", () => {
-        state.theme = $("themeSelect").value;
+      $("themeToggleBtn").addEventListener("click", () => {
+        state.theme = state.theme === "dark" ? "light" : "dark";
         applyTheme();
         saveLocalSettings();
       });
-      $("horizontalBtn").addEventListener("click", () => setOrientation("horizontal"));
-      $("verticalBtn").addEventListener("click", () => setOrientation("vertical"));
+      $("orientationToggleBtn").addEventListener("click", () => {
+        setOrientation(state.orientation === "horizontal" ? "vertical" : "horizontal");
+      });
       $("settingsBtn").addEventListener("click", () => $("configDrawer").classList.add("open"));
       $("closeSettingsBtn").addEventListener("click", () => $("configDrawer").classList.remove("open"));
       wireSettingsAccordion();
@@ -210,9 +211,9 @@ const technicians = [
         updateWorkingHours();
         if (saved.theme) {
           state.theme = saved.theme;
-          $("themeSelect").value = saved.theme;
         }
         if (Array.isArray(saved.reportLists) && saved.reportLists.length) state.reportLists = saved.reportLists;
+        if (saved.orientation === "vertical" || saved.orientation === "horizontal") state.orientation = saved.orientation;
         if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
         if (saved.collapsedLists) state.collapsedLists = saved.collapsedLists;
         if (saved.listFilters) state.listFilters = saved.listFilters;
@@ -252,6 +253,7 @@ const technicians = [
         calendarStartTime: state.calendarStartTime,
         calendarEndTime: state.calendarEndTime,
         theme: state.theme,
+        orientation: state.orientation,
         reportLists: state.reportLists,
         listViews: state.listViews,
         collapsedLists: state.collapsedLists,
@@ -276,6 +278,7 @@ const technicians = [
 
     function applyTheme() {
       document.body.dataset.theme = state.theme;
+      updateHeaderToggles();
       applyTicketPanelState();
     }
 
@@ -409,6 +412,38 @@ const technicians = [
 
     function pencilIconSvg() {
       return `<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M17.7 3.3 20.7 6.3 8.9 18.1 4.5 19.5 5.9 15.1 17.7 3.3Zm-1.4 4.4-8.6 8.6-.4 1.4 1.4-.4 8.6-8.6-1-1Z" fill="currentColor"/></svg>`;
+    }
+
+    function sunIconSvg() {
+      return `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 7a5 5 0 1 1 0 10 5 5 0 0 1 0-10Zm0-5 1.2 3h-2.4L12 2Zm0 17 1.2 3h-2.4l1.2-3ZM4.2 3.8l3 1.3-1.7 1.7-1.3-3Zm14.3 13.4 1.3 3-3-1.3 1.7-1.7ZM2 12l3-1.2v2.4L2 12Zm17 0 3-1.2v2.4L19 12ZM5.5 17.2l1.7 1.7-3 1.3 1.3-3ZM18.5 6.8l-1.7-1.7 3-1.3-1.3 3Z" fill="currentColor"/></svg>`;
+    }
+
+    function moonIconSvg() {
+      return `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M20.5 15.4A8.2 8.2 0 0 1 8.6 3.5a8.8 8.8 0 1 0 11.9 11.9Z" fill="currentColor"/></svg>`;
+    }
+
+    function orientationIconSvg(orientation) {
+      if (orientation === "vertical") {
+        return `<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M5 3h5v18H5V3Zm9 0h5v18h-5V3Z" fill="currentColor"/></svg>`;
+      }
+      return `<svg viewBox="0 0 24 24" width="19" height="19" aria-hidden="true"><path d="M3 5h18v5H3V5Zm0 9h18v5H3v-5Z" fill="currentColor"/></svg>`;
+    }
+
+    function updateHeaderToggles() {
+      const themeButton = $("themeToggleBtn");
+      if (themeButton) {
+        themeButton.innerHTML = state.theme === "dark" ? moonIconSvg() : sunIconSvg();
+        themeButton.title = state.theme === "dark" ? "Switch to light mode" : "Switch to dark mode";
+        themeButton.setAttribute("aria-label", themeButton.title);
+        themeButton.classList.toggle("active", state.theme === "dark");
+      }
+      const orientationButton = $("orientationToggleBtn");
+      if (orientationButton) {
+        orientationButton.innerHTML = orientationIconSvg(state.orientation);
+        orientationButton.title = state.orientation === "horizontal" ? "Switch to vertical view" : "Switch to horizontal view";
+        orientationButton.setAttribute("aria-label", orientationButton.title);
+        orientationButton.classList.toggle("active", state.orientation === "vertical");
+      }
     }
 
     function setTicketPanelOpen(open) {
@@ -1946,8 +1981,8 @@ const technicians = [
     function setOrientation(orientation) {
       state.orientation = orientation;
       state.shouldCenterNow = true;
-      $("horizontalBtn").classList.toggle("active", orientation === "horizontal");
-      $("verticalBtn").classList.toggle("active", orientation === "vertical");
+      updateHeaderToggles();
+      saveLocalSettings();
       renderBoard();
     }
 

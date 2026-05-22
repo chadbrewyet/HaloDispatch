@@ -189,6 +189,21 @@
       color: #fff;
     }
 
+    .header-icon-toggle {
+      width: 36px;
+      min-height: 34px;
+      padding: 0;
+      display: inline-grid;
+      place-items: center;
+      background: var(--panel);
+    }
+
+    .header-icon-toggle.active {
+      border-color: var(--accent);
+      background: var(--soft);
+      color: var(--accent);
+    }
+
     .api-pill {
       border: 1px solid #b5d3c8;
       color: #236d57;
