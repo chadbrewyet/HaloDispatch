@@ -994,14 +994,13 @@ async function loadCustomTable(env, tableId) {
 
 async function saveCustomTableRow(env, tableId, row, existingRow, fields = []) {
   const customfields = rowToCustomFields(row, fields);
-  const rowPayload = {
-    ...(existingRow?.id ? { id: existingRow.id } : {}),
-    ...(customfields.length ? { customfields } : row)
-  };
   const body = [{
     id: Number(tableId),
     customextratableid: Number(tableId),
-    rows: [rowPayload]
+    ...(existingRow?.id ? { key: existingRow.id } : {}),
+    _isimport: true,
+    _importtype: "customtable",
+    customfields: customfields.length ? customfields : rowToFallbackCustomFields(row)
   }];
   const response = await haloRequestWithFallback(env, ["/api/CustomTable", "/api/CustomTables"], {
     method: "POST",
@@ -1028,6 +1027,13 @@ function rowToCustomFields(row, fields = []) {
       value
     }];
   });
+}
+
+function rowToFallbackCustomFields(row) {
+  return Object.entries(row).map(([key, value]) => ({
+    name: key,
+    value
+  }));
 }
 
 async function haloRequestWithFallback(env, paths, options = {}) {
