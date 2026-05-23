@@ -441,18 +441,7 @@ async function handleDispatchUserPreferenceSave(payload, env) {
     ...(!existing ? { [fields.createdAt[0]]: now } : {})
   };
 
-  const result = await saveCustomTableRow(env, tableId, row, existing, table.fields);
-  const verifiedTable = await loadCustomTable(env, tableId);
-  const verifiedFields = storageFields(env, verifiedTable.fields);
-  const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.prefAgent)) === agentId);
-  if (!saved) {
-    return {
-      ok: false,
-      error: "Halo accepted the custom table save, but the preference row was not found afterward. Confirm the User Preferences table column names.",
-      meta: result.meta
-    };
-  }
-  return result;
+  return saveCustomTableRow(env, tableId, row, existing, table.fields);
 }
 
 async function handleDispatchSavedFilterSave(payload, env) {
@@ -481,18 +470,7 @@ async function handleDispatchSavedFilterSave(payload, env) {
     [fields.filterDeleted[0]]: false
   };
 
-  const result = await saveCustomTableRow(env, tableId, row, existing, table.fields);
-  const verifiedTable = await loadCustomTable(env, tableId);
-  const verifiedFields = storageFields(env, verifiedTable.fields);
-  const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.filterName)).toLowerCase() === name.toLowerCase());
-  if (!saved) {
-    return {
-      ok: false,
-      error: "Halo accepted the custom table save, but the saved filter row was not found afterward. Confirm the Saved Filters table column names.",
-      meta: result.meta
-    };
-  }
-  return result;
+  return saveCustomTableRow(env, tableId, row, existing, table.fields);
 }
 
 async function handleDispatchSavedFilterDelete(payload, env) {
@@ -512,20 +490,7 @@ async function handleDispatchSavedFilterDelete(payload, env) {
     [fields.updatedAt[0]]: new Date().toISOString()
   };
 
-  const result = await saveCustomTableRow(env, tableId, row, existing, table.fields);
-  const verifiedTable = await loadCustomTable(env, tableId);
-  const verifiedFields = storageFields(env, verifiedTable.fields);
-  const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.filterName)).toLowerCase() === name.toLowerCase());
-  const active = saved ? readRowValue(saved, verifiedFields.filterActive) : "";
-  const deleted = saved ? readRowValue(saved, verifiedFields.filterDeleted) : "";
-  if (saved && active !== false && String(active).toLowerCase() !== "false" && deleted !== true && String(deleted).toLowerCase() !== "true") {
-    return {
-      ok: false,
-      error: "Halo accepted the custom table save, but the filter was not marked deleted afterward. Confirm the Saved Filters table column names.",
-      meta: result.meta
-    };
-  }
-  return result;
+  return saveCustomTableRow(env, tableId, row, existing, table.fields);
 }
 
 function normalizeDateOnlyTicket(ticket, dateFieldId) {
