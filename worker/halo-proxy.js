@@ -950,11 +950,29 @@ async function loadCustomTable(env, tableId) {
   const table = response.data || {};
   return {
     id: Number(table.id || table.customextratableid || tableId),
-    rows: Array.isArray(table.rows) ? table.rows : [],
+    rows: customTableRows(table),
     fields: Array.isArray(table.fields) ? table.fields : [],
     schema: Array.isArray(table.schema) ? table.schema : [],
     raw: table
   };
+}
+
+function customTableRows(table) {
+  const rows = Array.isArray(table.rows) ? [...table.rows] : [];
+  const nestedRows = (Array.isArray(table.customfields) ? table.customfields : [])
+    .flatMap(field => Array.isArray(field.value) ? field.value : [])
+    .filter(row => Array.isArray(row?.customfields));
+
+  nestedRows.forEach(row => {
+    const key = row.id || row.key || row.fkid || row.display || JSON.stringify(row.customfields);
+    const exists = rows.some(entry => {
+      const entryKey = entry.id || entry.key || entry.fkid || entry.display || JSON.stringify(entry.customfields || entry);
+      return String(entryKey) === String(key);
+    });
+    if (!exists) rows.push(row);
+  });
+
+  return rows;
 }
 
 async function saveCustomTableRow(env, tableId, row, existingRow, fields = []) {

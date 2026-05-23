@@ -381,7 +381,7 @@ const technicians = [
     }
 
     function scheduleHaloPreferenceSave() {
-      if (state.loadingHaloStorage || !state.apiProxyUrl || !currentStorageAgentId()) return;
+      if (!state.haloStorageLoaded || state.loadingHaloStorage || !state.apiProxyUrl || !currentStorageAgentId()) return;
       clearTimeout(state.haloStorageSaveTimer);
       state.haloStorageSaveTimer = setTimeout(() => {
         saveHaloUserPreferences({ quiet: true });
