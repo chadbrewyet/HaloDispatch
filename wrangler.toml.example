@@ -26,3 +26,18 @@ HALO_APPOINTMENT_TYPE_ID = ""
 # Optional pagination controls. Halo Tickets documents page_size maximum 100.
 HALO_PAGE_SIZE = "100"
 HALO_MAX_PAGES = "50"
+
+# Halo custom table storage for dispatch preferences and shared saved filters.
+HALO_USER_PREF_TABLE_ID = "1013"
+HALO_SAVED_FILTER_TABLE_ID = "1014"
+
+# Optional custom table column names. Update these if your Halo columns use different database names.
+HALO_PREF_AGENT_FIELD = "agent_id"
+HALO_PREF_JSON_FIELD = "preferences_json"
+HALO_FILTER_NAME_FIELD = "filter_name"
+HALO_FILTER_TITLE_FIELD = "list_title"
+HALO_FILTER_COLOR_FIELD = "color"
+HALO_FILTER_JSON_FIELD = "filter_json"
+HALO_FILTER_DELETED_FIELD = "deleted"
+HALO_FILTER_UPDATED_BY_FIELD = "updated_by_agent_id"
+HALO_STORAGE_UPDATED_AT_FIELD = "updated_at"

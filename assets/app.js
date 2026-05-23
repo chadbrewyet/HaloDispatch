@@ -46,6 +46,7 @@ const technicians = [
       copyFilterMenuOpen: false,
       activeFilterListKey: null,
       draftFilter: null,
+      currentAgentId: "",
       activeTechEditId: null,
       techThemes: {},
       collapsedTechGroups: {},
@@ -60,6 +61,9 @@ const technicians = [
       ticketRefreshMinutes: 2,
       ticketRefreshTimer: null,
       currentTimeTimer: null,
+      haloStorageLoaded: false,
+      haloStorageSaveTimer: null,
+      loadingHaloStorage: false,
       shouldCenterNow: true,
       calendarScroll: {},
       pendingAppointment: null,
@@ -120,6 +124,7 @@ const technicians = [
       loadHaloTechnicians();
       loadHaloTicketTypes();
       loadHaloTickets({ quiet: true });
+      loadHaloStorage({ quiet: true });
     }
 
     function bindEvents() {
@@ -313,6 +318,74 @@ const technicians = [
         selectedTicketTypes: state.selectedTicketTypes,
         selectionDefaultsVersion: 1
       }));
+      scheduleHaloPreferenceSave();
+    }
+
+    function dispatchPreferencePayload() {
+      return {
+        visibleFields: state.visibleFields,
+        colorBy: state.colorBy,
+        show24Hours: state.show24Hours,
+        calendarStartTime: state.calendarStartTime,
+        calendarEndTime: state.calendarEndTime,
+        theme: state.theme,
+        orientation: state.orientation,
+        reportLists: state.reportLists,
+        listViews: state.listViews,
+        collapsedLists: state.collapsedLists,
+        listFilters: state.listFilters,
+        selectedListFilterFields: state.selectedListFilterFields,
+        techThemes: state.techThemes,
+        collapsedTechGroups: state.collapsedTechGroups,
+        sectionSizes: state.sectionSizes,
+        ticketPanelPinned: state.ticketPanelPinned,
+        ticketPanelWidth: state.ticketPanelWidth,
+        appointmentRefreshMinutes: state.appointmentRefreshMinutes,
+        ticketRefreshMinutes: state.ticketRefreshMinutes,
+        selectedTeams: state.selectedTeams,
+        selectedTechs: state.selectedTechs,
+        selectedTicketTypes: state.selectedTicketTypes,
+        selectionDefaultsVersion: 1
+      };
+    }
+
+    function applyDispatchPreferencePayload(preferences = {}) {
+      const keepConnection = {
+        apiBaseUrl: state.apiBaseUrl,
+        apiProxyUrl: state.apiProxyUrl
+      };
+      Object.assign(state, preferences, keepConnection);
+      if (state.selectedTechs.length && !state.currentAgentId) state.currentAgentId = state.selectedTechs[0];
+      $("colorBySelect").value = state.colorBy;
+      $("show24HoursCheck").checked = state.show24Hours;
+      $("calendarStartTime").value = state.calendarStartTime;
+      $("calendarEndTime").value = state.calendarEndTime;
+      $("appointmentRefreshSelect").value = String(state.appointmentRefreshMinutes);
+      $("ticketRefreshSelect").value = String(state.ticketRefreshMinutes);
+      updateWorkingHours();
+      applyTheme();
+      renderTeamSelect();
+      renderTechPicker();
+      renderTicketTypeSelect();
+      renderListFilterFieldPicker();
+      renderDeleteFilterSelect();
+      renderFieldChecks();
+      renderReportLists();
+      renderBoard();
+      resetAppointmentRefreshTimer();
+      resetTicketRefreshTimer();
+    }
+
+    function currentStorageAgentId() {
+      return String(state.currentAgentId || state.selectedTechs[0] || "").trim();
+    }
+
+    function scheduleHaloPreferenceSave() {
+      if (state.loadingHaloStorage || !state.apiProxyUrl || !currentStorageAgentId()) return;
+      clearTimeout(state.haloStorageSaveTimer);
+      state.haloStorageSaveTimer = setTimeout(() => {
+        saveHaloUserPreferences({ quiet: true });
+      }, 1200);
     }
 
     function applyIframeParams() {
@@ -322,7 +395,10 @@ const technicians = [
       const theme = params.get("theme");
       const orientation = params.get("orientation");
 
-      if (agentIds.length) state.selectedTechs = agentIds;
+      if (agentIds.length) {
+        state.selectedTechs = agentIds;
+        state.currentAgentId = agentIds[0];
+      }
       if (teamIds.length) state.selectedTeams = teamIds;
       if (theme === "light" || theme === "dark") state.theme = theme;
       if (orientation === "horizontal" || orientation === "vertical") state.orientation = orientation;
@@ -654,6 +730,7 @@ const technicians = [
       renderDeleteFilterSelect();
       renderReportLists();
       toast("Filter deleted", `${name} was removed from saved ticket filters.`);
+      deleteHaloSavedFilter(name);
     }
 
     function filteredTechnicians() {
@@ -1113,6 +1190,7 @@ const technicians = [
       state.savedFilters[name] = normalizeFilterShape(state.draftFilter);
       renderDeleteFilterSelect();
       saveLocalSettings();
+      saveHaloSavedFilter(name, state.savedFilters[name]);
       toast("Filter saved", `${name} is available for ticket lists.`);
     }
 
@@ -1258,6 +1336,7 @@ const technicians = [
       }
       state.savedFilters[name] = normalizeFilterShape(filter);
       saveLocalSettings();
+      saveHaloSavedFilter(name, state.savedFilters[name]);
       renderDeleteFilterSelect();
       renderReportLists();
       toast("Filter saved", `${name} is available for other ticket lists.`);
@@ -2154,9 +2233,70 @@ const technicians = [
       resetAppointmentRefreshTimer();
       resetTicketRefreshTimer();
       toast("Connection settings saved", state.apiProxyUrl || "Mock mode remains active until the Worker URL is added.");
+      loadHaloStorage({ quiet: true });
       loadHaloTechnicians();
       loadHaloTicketTypes();
       loadHaloTickets();
+    }
+
+    async function loadHaloStorage(options = {}) {
+      if (!state.apiProxyUrl) return;
+      const result = await callHalo("loadDispatchStorage", {
+        agentId: currentStorageAgentId()
+      }, { quiet: true });
+      if (!result?.ok) return;
+
+      state.loadingHaloStorage = true;
+      try {
+        const savedFilters = result.data?.savedFilters || {};
+        if (Object.keys(savedFilters).length) {
+          state.savedFilters = {
+            ...state.savedFilters,
+            ...savedFilters
+          };
+        }
+        const preferences = result.data?.userPreferences?.preferences;
+        if (preferences && Object.keys(preferences).length) {
+          applyDispatchPreferencePayload(preferences);
+          loadHaloTickets({ quiet: true });
+          loadHaloAppointments({ quiet: true });
+        } else {
+          renderDeleteFilterSelect();
+          renderReportLists();
+        }
+        state.haloStorageLoaded = true;
+        if (!options.quiet) toast("Halo storage loaded", "User preferences and shared filters were loaded from Halo.");
+      } finally {
+        state.loadingHaloStorage = false;
+      }
+    }
+
+    async function saveHaloUserPreferences(options = {}) {
+      if (!state.apiProxyUrl || !currentStorageAgentId()) return;
+      const result = await callHalo("saveDispatchUserPreferences", {
+        agentId: currentStorageAgentId(),
+        preferences: dispatchPreferencePayload()
+      }, { quiet: true });
+      if (result?.ok && !options.quiet) toast("Preferences saved", "Your dispatch board preferences were saved to Halo.");
+    }
+
+    async function saveHaloSavedFilter(name, filter) {
+      if (!state.apiProxyUrl || !name) return;
+      const result = await callHalo("saveDispatchSavedFilter", {
+        agentId: currentStorageAgentId(),
+        name,
+        filter
+      }, { quiet: true });
+      if (result?.ok === false) toast("Filter sync failed", result.error || "The saved filter remains available locally.");
+    }
+
+    async function deleteHaloSavedFilter(name) {
+      if (!state.apiProxyUrl || !name) return;
+      const result = await callHalo("deleteDispatchSavedFilter", {
+        agentId: currentStorageAgentId(),
+        name
+      }, { quiet: true });
+      if (result?.ok === false) toast("Filter sync failed", result.error || "The filter was removed locally but not in Halo.");
     }
 
     async function loadHaloTechnicians() {

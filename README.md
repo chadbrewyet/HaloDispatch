@@ -47,6 +47,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
    - `HALO_DISPLAY_TIME_ZONE` controls how Halo calendar times are shown on the dispatch board.
    - `HALO_PAGE_SIZE` and `HALO_MAX_PAGES` control paginated Halo reads. The default page size is `100`.
+   - `HALO_USER_PREF_TABLE_ID` and `HALO_SAVED_FILTER_TABLE_ID` point to the Halo custom tables used for shared storage. Current defaults are `1013` and `1014`.
 
 5. Store secrets:
 
@@ -86,6 +87,7 @@ The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
 - all-day task creation: `POST /api/Appointment`
 - without-time assignment: `POST /api/Tickets`
 - scheduled-to-without-time moves: `DELETE /api/Appointment/{id}` then `POST /api/Tickets`
+- dispatch user preferences and saved filters: `GET /api/CustomTable/{id}?includedetails=true` and `POST /api/CustomTable`
 
 Moving an already scheduled appointment to a new time, technician, all-day section, or without-time section uses the loaded Halo `appointment_id` and updates Halo directly.
 
@@ -108,68 +110,72 @@ Technician and team display names are loaded from `GET /api/Agent`. A technician
 
 ## Recommended Halo Storage Tables
 
-Use these as a starting point if you create Halo Custom Tables for shared configuration.
+The app can now sync local browser settings to Halo custom tables through the Worker. Local storage remains the immediate fallback, so the board still works if a custom-table column name needs adjustment.
 
 ### DispatchBoardUserPreferences
 
-One row per Halo agent.
+Current table ID: `1013`. One row per Halo agent.
 
 - `agent_id` integer, unique
-- `theme` text
-- `orientation` text
-- `selected_team_ids_json` long text
-- `selected_agent_ids_json` long text
-- `ticket_panel_pinned` boolean
-- `ticket_panel_width` integer
-- `calendar_start_time` text
-- `calendar_end_time` text
-- `tech_themes_json` long text
-- `visible_ticket_fields_json` long text
-- `created_at` date/time
+- `preferences_json` long text
 - `updated_at` date/time
 
 ### DispatchBoardSavedFilters
 
-Shared ticket-list definitions available to all dispatch users.
+Current table ID: `1014`. Shared ticket-list definitions available to all dispatch users.
 
 - `filter_name` text, unique
 - `list_title` text
 - `color` text
-- `conditions_json` long text
-- `created_by_agent_id` integer
+- `filter_json` long text
+- `deleted` boolean
 - `updated_by_agent_id` integer
-- `is_active` boolean
-- `created_at` date/time
 - `updated_at` date/time
 
-Example `conditions_json`:
+The Worker defaults to those column names. If your Halo table uses different names, set these Worker variables:
+
+- `HALO_PREF_AGENT_FIELD`
+- `HALO_PREF_JSON_FIELD`
+- `HALO_FILTER_NAME_FIELD`
+- `HALO_FILTER_TITLE_FIELD`
+- `HALO_FILTER_COLOR_FIELD`
+- `HALO_FILTER_JSON_FIELD`
+- `HALO_FILTER_DELETED_FIELD`
+- `HALO_FILTER_UPDATED_BY_FIELD`
+- `HALO_STORAGE_UPDATED_AT_FIELD`
+
+Example `filter_json`:
 
 ```json
-[
-  {
-    "joiner": "and",
-    "mode": "include",
-    "field": "team",
-    "values": ["3", "11"]
-  },
-  {
-    "joiner": "and",
-    "mode": "exclude",
-    "field": "status",
-    "values": ["Closed", "Completed"]
-  }
-]
+{
+  "name": "Dispatch Triage",
+  "title": "Dispatch Triage",
+  "color": "#1976a3",
+  "conditions": [
+    {
+      "joiner": "and",
+      "mode": "include",
+      "field": "team",
+      "values": ["3", "11"]
+    },
+    {
+      "joiner": "and",
+      "mode": "exclude",
+      "field": "status",
+      "values": ["Closed", "Completed"]
+    }
+  ]
+}
 ```
 
 ## Production Hardening Notes
 
 - Add a Worker-side authorization check before broad rollout. Good options are Cloudflare Access, a Halo-issued signed iframe token, or another short-lived server-side validation flow.
 - Keep `HALO_DEBUG_LOGS` unset or false in production. Enable it temporarily only while troubleshooting Worker/Halo payload mappings.
-- Consider storing saved filters and user preferences in Halo custom tables instead of browser `localStorage` once the table endpoints are confirmed.
+- Confirm the custom-table row update shape in the live tenant. The Worker uses a conservative insert/update payload based on Halo Swagger, but custom table field names may need to be adjusted in Worker variables.
 
 ## Still Needed From HaloPSA
 
 To finish the live ticket views, we still need:
 
-- final custom-table API endpoint names for shared filters and user preferences
 - the custom field ID for `Service Zone` if Halo does not return it by name in normal ticket loads

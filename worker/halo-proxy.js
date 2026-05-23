@@ -25,6 +25,8 @@ const excludedTicketTypeNames = new Set([
 
 const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_PAGES = 50;
+const DEFAULT_USER_PREF_TABLE_ID = 1013;
+const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 
 export default {
   async fetch(request, env) {
@@ -76,6 +78,22 @@ async function handleDashboardAction(body, env) {
 
   if (action === "loadDateOnlyTasks") {
     return handleDateOnlyTaskLoad(payload, env);
+  }
+
+  if (action === "loadDispatchStorage") {
+    return handleDispatchStorageLoad(payload, env);
+  }
+
+  if (action === "saveDispatchUserPreferences") {
+    return handleDispatchUserPreferenceSave(payload, env);
+  }
+
+  if (action === "saveDispatchSavedFilter") {
+    return handleDispatchSavedFilterSave(payload, env);
+  }
+
+  if (action === "deleteDispatchSavedFilter") {
+    return handleDispatchSavedFilterDelete(payload, env);
   }
 
   if (action === "moveAppointmentToDateOnly") {
@@ -370,6 +388,89 @@ async function handleDateOnlyTaskLoad(payload, env) {
       pages: meta.pages
     }
   };
+}
+
+async function handleDispatchStorageLoad(payload, env) {
+  const agentId = String(payload.agentId || "").trim();
+  const [preferencesTable, filtersTable] = await Promise.all([
+    loadCustomTable(env, customTableId(env, "HALO_USER_PREF_TABLE_ID", DEFAULT_USER_PREF_TABLE_ID)),
+    loadCustomTable(env, customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID))
+  ]);
+
+  const preferences = agentId ? normalizeUserPreferenceRows(preferencesTable.rows, agentId, env) : null;
+  const savedFilters = normalizeSavedFilterRows(filtersTable.rows, env);
+
+  return {
+    ok: true,
+    data: {
+      userPreferences: preferences,
+      savedFilters,
+      meta: {
+        userPreferenceRows: preferencesTable.rows.length,
+        savedFilterRows: filtersTable.rows.length,
+        userPreferenceTableId: preferencesTable.id,
+        savedFilterTableId: filtersTable.id
+      }
+    }
+  };
+}
+
+async function handleDispatchUserPreferenceSave(payload, env) {
+  const agentId = String(payload.agentId || "").trim();
+  if (!agentId) throw new Error("agentId is required to save user preferences.");
+
+  const tableId = customTableId(env, "HALO_USER_PREF_TABLE_ID", DEFAULT_USER_PREF_TABLE_ID);
+  const table = await loadCustomTable(env, tableId);
+  const fields = storageFields(env);
+  const existing = table.rows.find(row => String(readRowValue(row, fields.prefAgent)) === agentId);
+  const row = {
+    [fields.prefAgent[0]]: agentId,
+    [fields.prefJson[0]]: JSON.stringify(payload.preferences || {}),
+    [fields.updatedAt[0]]: new Date().toISOString()
+  };
+
+  return saveCustomTableRow(env, tableId, row, existing);
+}
+
+async function handleDispatchSavedFilterSave(payload, env) {
+  const name = String(payload.name || payload.filter?.name || "").trim();
+  if (!name) throw new Error("Filter name is required.");
+
+  const tableId = customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID);
+  const table = await loadCustomTable(env, tableId);
+  const fields = storageFields(env);
+  const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
+  const filter = payload.filter || {};
+  const row = {
+    [fields.filterName[0]]: name,
+    [fields.filterTitle[0]]: filter.title || name,
+    [fields.filterColor[0]]: filter.color || "",
+    [fields.filterJson[0]]: JSON.stringify(filter),
+    [fields.filterDeleted[0]]: false,
+    [fields.filterUpdatedBy[0]]: String(payload.agentId || ""),
+    [fields.updatedAt[0]]: new Date().toISOString()
+  };
+
+  return saveCustomTableRow(env, tableId, row, existing);
+}
+
+async function handleDispatchSavedFilterDelete(payload, env) {
+  const name = String(payload.name || "").trim();
+  if (!name) throw new Error("Filter name is required.");
+
+  const tableId = customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID);
+  const table = await loadCustomTable(env, tableId);
+  const fields = storageFields(env);
+  const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
+  if (!existing) return { ok: true, mode: "not-found", message: "Saved filter was not present in Halo storage." };
+
+  const row = {
+    [fields.filterName[0]]: name,
+    [fields.filterDeleted[0]]: true,
+    [fields.updatedAt[0]]: new Date().toISOString()
+  };
+
+  return saveCustomTableRow(env, tableId, row, existing);
 }
 
 function normalizeDateOnlyTicket(ticket, dateFieldId) {
@@ -819,6 +920,135 @@ function pageSize(env, requested) {
 function maxPageCount(env, requested) {
   const value = Number(requested || env.HALO_MAX_PAGES || DEFAULT_MAX_PAGES);
   return Math.max(1, Number.isFinite(value) ? value : DEFAULT_MAX_PAGES);
+}
+
+async function loadCustomTable(env, tableId) {
+  const response = await haloRequestWithFallback(env, [
+    `/api/CustomTable/${encodeURIComponent(tableId)}?includedetails=true`,
+    `/api/CustomTables/${encodeURIComponent(tableId)}?includedetails=true`
+  ], { method: "GET" });
+  const table = response.data || {};
+  return {
+    id: Number(table.id || table.customextratableid || tableId),
+    rows: Array.isArray(table.rows) ? table.rows : [],
+    schema: Array.isArray(table.schema) ? table.schema : [],
+    raw: table
+  };
+}
+
+async function saveCustomTableRow(env, tableId, row, existingRow) {
+  const body = [{
+    id: Number(tableId),
+    ...(existingRow?.id ? { rows: [{ id: existingRow.id, ...row }] } : { _add_rows: [row] })
+  }];
+  const response = await haloRequestWithFallback(env, ["/api/CustomTable", "/api/CustomTables"], {
+    method: "POST",
+    body
+  });
+  return {
+    ok: true,
+    data: response.data,
+    meta: {
+      tableId: Number(tableId),
+      mode: existingRow?.id ? "update" : "insert"
+    }
+  };
+}
+
+async function haloRequestWithFallback(env, paths, options = {}) {
+  let lastError;
+  for (const path of paths) {
+    try {
+      return await haloRequest(env, path, options);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
+}
+
+function normalizeUserPreferenceRows(rows, agentId, env) {
+  const fields = storageFields(env);
+  const row = rows.find(entry => String(readRowValue(entry, fields.prefAgent)) === String(agentId));
+  if (!row) return null;
+  return {
+    rowId: row.id || null,
+    agentId,
+    preferences: parseStorageJson(readRowValue(row, fields.prefJson), {})
+  };
+}
+
+function normalizeSavedFilterRows(rows, env) {
+  const fields = storageFields(env);
+  return rows.reduce((filters, row) => {
+    const deleted = readRowValue(row, fields.filterDeleted);
+    if (deleted === true || String(deleted).toLowerCase() === "true") return filters;
+
+    const name = String(readRowValue(row, fields.filterName) || "").trim();
+    if (!name) return filters;
+
+    const filter = parseStorageJson(readRowValue(row, fields.filterJson), {});
+    filters[name] = {
+      ...filter,
+      name: filter.name || name,
+      title: filter.title || readRowValue(row, fields.filterTitle) || name,
+      color: filter.color || readRowValue(row, fields.filterColor) || "#1976a3"
+    };
+    return filters;
+  }, {});
+}
+
+function storageFields(env) {
+  return {
+    prefAgent: fieldAliases(env.HALO_PREF_AGENT_FIELD, ["agent_id", "agentId", "Agent ID", "Agent"]),
+    prefJson: fieldAliases(env.HALO_PREF_JSON_FIELD, ["preferences_json", "settings_json", "preferences", "settings", "json"]),
+    filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, ["filter_name", "name", "Filter Name"]),
+    filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, ["list_title", "title", "List Title"]),
+    filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, ["color", "theme_color", "Color"]),
+    filterJson: fieldAliases(env.HALO_FILTER_JSON_FIELD, ["filter_json", "filter", "json"]),
+    filterDeleted: fieldAliases(env.HALO_FILTER_DELETED_FIELD, ["deleted", "is_deleted", "Deleted"]),
+    filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, ["updated_by_agent_id", "agent_id", "Updated By Agent"]),
+    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["updated_at", "Updated At"])
+  };
+}
+
+function fieldAliases(configured, defaults) {
+  const values = parseListEnv(configured);
+  return values.length ? values : defaults;
+}
+
+function readRowValue(row, names) {
+  for (const name of names) {
+    if (row[name] !== undefined && row[name] !== null) return row[name];
+    const match = Object.keys(row).find(key => key.toLowerCase() === String(name).toLowerCase());
+    if (match && row[match] !== undefined && row[match] !== null) return row[match];
+  }
+
+  const customfields = Array.isArray(row.customfields) ? row.customfields : [];
+  for (const name of names) {
+    const match = customfields.find(field => {
+      const labels = [field.name, field.label, field.display, field.summary].map(value => String(value || "").toLowerCase());
+      return labels.includes(String(name).toLowerCase());
+    });
+    if (match) return match.value ?? match.display ?? "";
+  }
+
+  return "";
+}
+
+function parseStorageJson(value, fallback) {
+  if (!value) return fallback;
+  if (typeof value === "object") return value;
+  try {
+    return JSON.parse(String(value));
+  } catch {
+    return fallback;
+  }
+}
+
+function customTableId(env, key, fallback) {
+  const value = Number(env[key] || fallback);
+  return Number.isFinite(value) && value > 0 ? value : fallback;
 }
 
 function compactObject(value) {
