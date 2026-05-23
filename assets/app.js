@@ -377,7 +377,7 @@ const technicians = [
     }
 
     function currentStorageAgentId() {
-      return String(state.currentAgentId || state.selectedTechs[0] || "").trim();
+      return String(state.currentAgentId || "").trim();
     }
 
     function scheduleHaloPreferenceSave() {
@@ -390,18 +390,9 @@ const technicians = [
 
     function applyIframeParams() {
       const params = new URLSearchParams(window.location.search);
-      const agentIds = splitParamList(params.get("agent_ids") || params.get("agent_id"));
-      const teamIds = splitParamList(params.get("team_ids") || params.get("team_id"));
-      const theme = params.get("theme");
-      const orientation = params.get("orientation");
+      const viewerAgentIds = splitParamList(params.get("viewer_agent_id") || params.get("current_agent_id") || params.get("dispatch_agent_id"));
 
-      if (agentIds.length) {
-        state.selectedTechs = agentIds;
-        state.currentAgentId = agentIds[0];
-      }
-      if (teamIds.length) state.selectedTeams = teamIds;
-      if (theme === "light" || theme === "dark") state.theme = theme;
-      if (orientation === "horizontal" || orientation === "vertical") state.orientation = orientation;
+      if (viewerAgentIds.length) state.currentAgentId = viewerAgentIds[0];
     }
 
     function splitParamList(value) {
@@ -2274,7 +2265,7 @@ const technicians = [
     async function saveHaloUserPreferences(options = {}) {
       if (!state.apiProxyUrl) return;
       if (!currentStorageAgentId()) {
-        if (!options.quiet) toast("Preferences not synced", "Pass agent_id in the iframe URL or select an agent before saving user preferences.");
+        if (!options.quiet) toast("Preferences not synced", "Pass viewer_agent_id in the iframe URL before saving user preferences.");
         return;
       }
       const result = await callHalo("saveDispatchUserPreferences", {
@@ -2639,10 +2630,17 @@ const technicians = [
     }
 
     async function callHalo(action, payload, options = {}) {
+      const enrichedPayload = {
+        ...(payload || {}),
+        context: {
+          ...(payload?.context || {}),
+          viewerAgentId: currentStorageAgentId() || undefined
+        }
+      };
       const request = {
         action,
         proxyUrl: state.apiProxyUrl || "(mock)",
-        payload,
+        payload: enrichedPayload,
         timestamp: new Date().toISOString()
       };
       debugLog("HaloPSA action", request);

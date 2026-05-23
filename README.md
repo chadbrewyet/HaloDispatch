@@ -16,11 +16,9 @@ Dispatch dashboard prototype for assigning HaloPSA service tickets to technician
 - The Cloudflare Worker is the only component that should call HaloPSA with API credentials.
 - The Worker intentionally exposes only explicit dashboard actions. Do not add a generic Halo API passthrough route.
 - The dashboard accepts iframe query parameters for initial context:
-  - `agent_id=14` or `agent_ids=14,17`
-  - `team_id=3` or `team_ids=1,3`
-  - `theme=light|dark`
-  - `orientation=horizontal|vertical`
-- Query parameters seed the local board state. Long-term shared/user settings should move into Halo-backed storage.
+  - `viewer_agent_id=4` identifies the Halo agent using the board. It is sent as API context and used as the lookup key for that agent's Halo-backed preferences.
+  - `current_agent_id=4` and `dispatch_agent_id=4` are accepted aliases.
+- Query parameters do not directly set board preferences, filters, selected calendars, theme, or orientation.
 
 ## Recommended Deployment
 
