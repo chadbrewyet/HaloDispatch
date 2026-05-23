@@ -421,17 +421,29 @@ async function handleDispatchUserPreferenceSave(payload, env) {
 
   const tableId = customTableId(env, "HALO_USER_PREF_TABLE_ID", DEFAULT_USER_PREF_TABLE_ID);
   const table = await loadCustomTable(env, tableId);
-  const fields = storageFields(env, table.schema);
+  const fields = storageFields(env, table.fields);
   const existing = table.rows.find(row => String(readRowValue(row, fields.prefAgent)) === agentId);
+  const preferences = payload.preferences || {};
+  const now = new Date().toISOString();
   const row = {
     [fields.prefAgent[0]]: agentId,
-    [fields.prefJson[0]]: JSON.stringify(payload.preferences || {}),
-    [fields.updatedAt[0]]: new Date().toISOString()
+    [fields.prefTheme[0]]: preferences.theme || "",
+    [fields.prefOrientation[0]]: preferences.orientation || "",
+    [fields.prefSelectedTeams[0]]: JSON.stringify(preferences.selectedTeams || []),
+    [fields.prefSelectedAgents[0]]: JSON.stringify(preferences.selectedTechs || []),
+    [fields.prefPanelPinned[0]]: Boolean(preferences.ticketPanelPinned),
+    [fields.prefPanelWidth[0]]: String(preferences.ticketPanelWidth || ""),
+    [fields.prefCalendarStart[0]]: preferences.calendarStartTime || "",
+    [fields.prefCalendarEnd[0]]: preferences.calendarEndTime || "",
+    [fields.prefTechThemes[0]]: JSON.stringify(preferences.techThemes || {}),
+    [fields.prefVisibleTickets[0]]: JSON.stringify(preferences.visibleFields || []),
+    [fields.updatedAt[0]]: now,
+    ...(!existing ? { [fields.createdAt[0]]: now } : {})
   };
 
-  const result = await saveCustomTableRow(env, tableId, row, existing);
+  const result = await saveCustomTableRow(env, tableId, row, existing, table.fields);
   const verifiedTable = await loadCustomTable(env, tableId);
-  const verifiedFields = storageFields(env, verifiedTable.schema);
+  const verifiedFields = storageFields(env, verifiedTable.fields);
   const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.prefAgent)) === agentId);
   if (!saved) {
     return {
@@ -449,7 +461,7 @@ async function handleDispatchSavedFilterSave(payload, env) {
 
   const tableId = customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID);
   const table = await loadCustomTable(env, tableId);
-  const fields = storageFields(env, table.schema);
+  const fields = storageFields(env, table.fields);
   const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
   const filter = payload.filter || {};
   const row = {
@@ -462,9 +474,9 @@ async function handleDispatchSavedFilterSave(payload, env) {
     [fields.updatedAt[0]]: new Date().toISOString()
   };
 
-  const result = await saveCustomTableRow(env, tableId, row, existing);
+  const result = await saveCustomTableRow(env, tableId, row, existing, table.fields);
   const verifiedTable = await loadCustomTable(env, tableId);
-  const verifiedFields = storageFields(env, verifiedTable.schema);
+  const verifiedFields = storageFields(env, verifiedTable.fields);
   const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.filterName)).toLowerCase() === name.toLowerCase());
   if (!saved) {
     return {
@@ -482,7 +494,7 @@ async function handleDispatchSavedFilterDelete(payload, env) {
 
   const tableId = customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID);
   const table = await loadCustomTable(env, tableId);
-  const fields = storageFields(env, table.schema);
+  const fields = storageFields(env, table.fields);
   const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
   if (!existing) return { ok: true, mode: "not-found", message: "Saved filter was not present in Halo storage." };
 
@@ -492,9 +504,9 @@ async function handleDispatchSavedFilterDelete(payload, env) {
     [fields.updatedAt[0]]: new Date().toISOString()
   };
 
-  const result = await saveCustomTableRow(env, tableId, row, existing);
+  const result = await saveCustomTableRow(env, tableId, row, existing, table.fields);
   const verifiedTable = await loadCustomTable(env, tableId);
-  const verifiedFields = storageFields(env, verifiedTable.schema);
+  const verifiedFields = storageFields(env, verifiedTable.fields);
   const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.filterName)).toLowerCase() === name.toLowerCase());
   const deleted = saved ? readRowValue(saved, verifiedFields.filterDeleted) : "";
   if (saved && deleted !== true && String(deleted).toLowerCase() !== "true") {
@@ -965,13 +977,18 @@ async function loadCustomTable(env, tableId) {
   return {
     id: Number(table.id || table.customextratableid || tableId),
     rows: Array.isArray(table.rows) ? table.rows : [],
+    fields: Array.isArray(table.fields) ? table.fields : [],
     schema: Array.isArray(table.schema) ? table.schema : [],
     raw: table
   };
 }
 
-async function saveCustomTableRow(env, tableId, row, existingRow) {
-  const rowPayload = existingRow?.id ? { id: existingRow.id, ...row } : row;
+async function saveCustomTableRow(env, tableId, row, existingRow, fields = []) {
+  const customfields = rowToCustomFields(row, fields);
+  const rowPayload = {
+    ...(existingRow?.id ? { id: existingRow.id } : {}),
+    ...(customfields.length ? { customfields } : row)
+  };
   const body = [{
     id: Number(tableId),
     customextratableid: Number(tableId),
@@ -989,6 +1006,19 @@ async function saveCustomTableRow(env, tableId, row, existingRow) {
       mode: existingRow?.id ? "update" : "insert"
     }
   };
+}
+
+function rowToCustomFields(row, fields = []) {
+  if (!fields.length) return [];
+  return Object.entries(row).flatMap(([key, value]) => {
+    const field = fields.find(entry => fieldMatches(entry, key));
+    if (!field?.id) return [];
+    return [{
+      id: field.id,
+      name: field.name,
+      value
+    }];
+  });
 }
 
 async function haloRequestWithFallback(env, paths, options = {}) {
@@ -1010,7 +1040,18 @@ function normalizeUserPreferenceRows(rows, agentId, env) {
   return {
     rowId: row.id || null,
     agentId,
-    preferences: parseStorageJson(readRowValue(row, fields.prefJson), {})
+    preferences: compactObject({
+      theme: readRowValue(row, fields.prefTheme),
+      orientation: readRowValue(row, fields.prefOrientation),
+      selectedTeams: parseStorageJson(readRowValue(row, fields.prefSelectedTeams), []),
+      selectedTechs: parseStorageJson(readRowValue(row, fields.prefSelectedAgents), []),
+      ticketPanelPinned: parseStorageBoolean(readRowValue(row, fields.prefPanelPinned)),
+      ticketPanelWidth: Number(readRowValue(row, fields.prefPanelWidth)) || undefined,
+      calendarStartTime: readRowValue(row, fields.prefCalendarStart),
+      calendarEndTime: readRowValue(row, fields.prefCalendarEnd),
+      techThemes: parseStorageJson(readRowValue(row, fields.prefTechThemes), {}),
+      visibleFields: parseStorageJson(readRowValue(row, fields.prefVisibleTickets), [])
+    })
   };
 }
 
@@ -1036,24 +1077,40 @@ function normalizeSavedFilterRows(rows, env) {
 
 function storageFields(env, schema = []) {
   return {
-    prefAgent: fieldAliases(env.HALO_PREF_AGENT_FIELD, ["agent_id", "agentId", "Agent ID", "Agent"], schema),
-    prefJson: fieldAliases(env.HALO_PREF_JSON_FIELD, ["preferences_json", "settings_json", "preferences", "settings", "json"], schema),
+    prefAgent: fieldAliases(env.HALO_PREF_AGENT_FIELD, ["CFDispatchAgentID", "agent_id", "agentId", "Agent ID", "Agent"], schema),
+    prefTheme: fieldAliases(env.HALO_PREF_THEME_FIELD, ["CFDispatchTheme", "theme", "Dispatch Theme"], schema),
+    prefOrientation: fieldAliases(env.HALO_PREF_ORIENTATION_FIELD, ["CFDispatchOrientation", "orientation", "Calendar Orientation"], schema),
+    prefSelectedTeams: fieldAliases(env.HALO_PREF_SELECTED_TEAMS_FIELD, ["CFDispatchSelectedTeams", "selected_team_ids_json", "Selected Teams"], schema),
+    prefSelectedAgents: fieldAliases(env.HALO_PREF_SELECTED_AGENTS_FIELD, ["CFDispatchSelectedAgents", "selected_agent_ids_json", "Selected Agents"], schema),
+    prefPanelPinned: fieldAliases(env.HALO_PREF_PANEL_PINNED_FIELD, ["CFDispatchPanelPinned", "ticket_panel_pinned", "Ticket Panel Pinned?"], schema),
+    prefPanelWidth: fieldAliases(env.HALO_PREF_PANEL_WIDTH_FIELD, ["CFDispatchPanelWidth", "ticket_panel_width", "Dispatch Ticket Panel Width"], schema),
+    prefCalendarStart: fieldAliases(env.HALO_PREF_CALENDAR_START_FIELD, ["CFDispatchCalendarStartTime", "calendar_start_time", "Calendar Start Time"], schema),
+    prefCalendarEnd: fieldAliases(env.HALO_PREF_CALENDAR_END_FIELD, ["CFDispatchCalendarEndTime", "calendar_end_time", "Calendar End Time"], schema),
+    prefTechThemes: fieldAliases(env.HALO_PREF_TECH_THEMES_FIELD, ["CFDispatchTechThemes", "tech_themes_json", "Tech Themes"], schema),
+    prefVisibleTickets: fieldAliases(env.HALO_PREF_VISIBLE_TICKETS_FIELD, ["CFDispatchVisibleTickets", "visible_ticket_fields_json", "Visible Tickets"], schema),
     filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, ["filter_name", "name", "Filter Name"], schema),
     filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, ["list_title", "title", "List Title"], schema),
     filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, ["color", "theme_color", "Color"], schema),
     filterJson: fieldAliases(env.HALO_FILTER_JSON_FIELD, ["filter_json", "filter", "json"], schema),
     filterDeleted: fieldAliases(env.HALO_FILTER_DELETED_FIELD, ["deleted", "is_deleted", "Deleted"], schema),
     filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, ["updated_by_agent_id", "agent_id", "Updated By Agent"], schema),
-    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["updated_at", "Updated At"], schema)
+    createdAt: fieldAliases(env.HALO_STORAGE_CREATED_AT_FIELD, ["CFDispatchCreatedAt", "created_at", "Created At"], schema),
+    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["CFDispatchUpdatedAt", "updated_at", "Updated At"], schema)
   };
 }
 
 function fieldAliases(configured, defaults, schema = []) {
   const values = parseListEnv(configured);
   const aliases = values.length ? values : defaults;
-  const schemaNames = schema.map(field => field.name).filter(Boolean);
-  const schemaMatch = schemaNames.find(name => aliases.some(alias => String(alias).toLowerCase() === String(name).toLowerCase()));
-  return schemaMatch ? [schemaMatch, ...aliases] : aliases;
+  const schemaMatch = schema.find(field => aliases.some(alias => fieldMatches(field, alias)));
+  return schemaMatch ? [schemaMatch.name, schemaMatch.label, schemaMatch.labellong, ...aliases].filter(Boolean) : aliases;
+}
+
+function fieldMatches(field, alias) {
+  const needle = normalizeFieldName(alias);
+  return [field.name, field.label, field.labellong, field.summary, field.id, field.guid]
+    .map(normalizeFieldName)
+    .some(value => value === needle);
 }
 
 function readRowValue(row, names) {
@@ -1066,8 +1123,7 @@ function readRowValue(row, names) {
   const customfields = Array.isArray(row.customfields) ? row.customfields : [];
   for (const name of names) {
     const match = customfields.find(field => {
-      const labels = [field.name, field.label, field.display, field.summary].map(value => String(value || "").toLowerCase());
-      return labels.includes(String(name).toLowerCase());
+      return fieldMatches(field, name);
     });
     if (match) return match.value ?? match.display ?? "";
   }
@@ -1083,6 +1139,16 @@ function parseStorageJson(value, fallback) {
   } catch {
     return fallback;
   }
+}
+
+function parseStorageBoolean(value) {
+  if (value === true || value === false) return value;
+  if (value === "" || value === undefined || value === null) return undefined;
+  return ["true", "1", "yes"].includes(String(value).toLowerCase());
+}
+
+function normalizeFieldName(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function customTableId(env, key, fallback) {

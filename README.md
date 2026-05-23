@@ -116,9 +116,19 @@ The app can now sync local browser settings to Halo custom tables through the Wo
 
 Current table ID: `1013`. One row per Halo agent.
 
-- `agent_id` integer, unique
-- `preferences_json` long text
-- `updated_at` date/time
+- `CFDispatchAgentID` text/integer, unique by agent
+- `CFDispatchTheme` text
+- `CFDispatchOrientation` text
+- `CFDispatchSelectedTeams` long text containing a JSON array
+- `CFDispatchSelectedAgents` long text containing a JSON array
+- `CFDispatchPanelPinned` checkbox
+- `CFDispatchPanelWidth` text/integer
+- `CFDispatchCalendarStartTime` text
+- `CFDispatchCalendarEndTime` text
+- `CFDispatchTechThemes` long text containing JSON
+- `CFDispatchVisibleTickets` long text containing a JSON array
+- `CFDispatchCreatedAt` text/date
+- `CFDispatchUpdatedAt` text/date
 
 ### DispatchBoardSavedFilters
 
@@ -135,13 +145,23 @@ Current table ID: `1014`. Shared ticket-list definitions available to all dispat
 The Worker defaults to those column names. If your Halo table uses different names, set these Worker variables:
 
 - `HALO_PREF_AGENT_FIELD`
-- `HALO_PREF_JSON_FIELD`
+- `HALO_PREF_THEME_FIELD`
+- `HALO_PREF_ORIENTATION_FIELD`
+- `HALO_PREF_SELECTED_TEAMS_FIELD`
+- `HALO_PREF_SELECTED_AGENTS_FIELD`
+- `HALO_PREF_PANEL_PINNED_FIELD`
+- `HALO_PREF_PANEL_WIDTH_FIELD`
+- `HALO_PREF_CALENDAR_START_FIELD`
+- `HALO_PREF_CALENDAR_END_FIELD`
+- `HALO_PREF_TECH_THEMES_FIELD`
+- `HALO_PREF_VISIBLE_TICKETS_FIELD`
 - `HALO_FILTER_NAME_FIELD`
 - `HALO_FILTER_TITLE_FIELD`
 - `HALO_FILTER_COLOR_FIELD`
 - `HALO_FILTER_JSON_FIELD`
 - `HALO_FILTER_DELETED_FIELD`
 - `HALO_FILTER_UPDATED_BY_FIELD`
+- `HALO_STORAGE_CREATED_AT_FIELD`
 - `HALO_STORAGE_UPDATED_AT_FIELD`
 
 Example `filter_json`:
