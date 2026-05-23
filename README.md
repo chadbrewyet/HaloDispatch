@@ -46,6 +46,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    - `HALO_DISPATCH_DATE_FIELD_ID` is the custom ticket date field used by the without-time section.
    - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
    - `HALO_DISPLAY_TIME_ZONE` controls how Halo calendar times are shown on the dispatch board.
+   - `HALO_PAGE_SIZE` and `HALO_MAX_PAGES` control paginated Halo reads. The default page size is `100`.
 
 5. Store secrets:
 
@@ -90,6 +91,10 @@ Moving an already scheduled appointment to a new time, technician, all-day secti
 
 Appointment refresh can be configured in Settings. The default is every 5 minutes, with a manual-only option available.
 Ticket list refresh can also be configured in Settings. The default is every 2 minutes, with a manual-only option available.
+
+Ticket, ticket type, appointment, and without-time task loads use paginated Halo reads so the board is not capped at the first response page.
+
+Write actions are optimistic for responsiveness, but the frontend now snapshots the dispatch state before a Halo write. If Halo rejects the update, the board restores the previous local state and displays a failure toast.
 
 Current Halo configuration:
 

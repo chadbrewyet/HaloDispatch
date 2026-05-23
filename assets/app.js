@@ -1796,7 +1796,7 @@ const technicians = [
       renderReportLists();
     }
 
-    function handleTicketDrop(ticketId, techId, kind, time, source = "ticket") {
+    async function handleTicketDrop(ticketId, techId, kind, time, source = "ticket") {
       const ticket = tickets.find(item => item.id === ticketId);
       if (!ticket) return;
       const tech = technicians.find(item => item.id === techId);
@@ -1833,19 +1833,31 @@ const technicians = [
         return;
       }
 
+      const snapshot = snapshotDispatchState();
       removeBoardItem(ticketId);
       ticket.assignedTo = techId;
       if (kind === "allDay") {
         ticket.dateField = selectedDate();
         state.boardItems.push({ ticketId, techId, kind: "allDay", label: ticket.title, date: selectedDate() });
-        callHalo(source === "scheduled" ? "moveToAllDayTask" : "createAllDayTask", { ticketId, technicianId: techId, date: $("boardDate").value, assignTicket: true });
-        toast(source === "scheduled" ? "Task moved" : "All-day task queued", `#${ticketId} assigned to ${tech.name}.`);
+        renderAll();
+        await persistOptimisticChange(snapshot, callHalo(source === "scheduled" ? "moveToAllDayTask" : "createAllDayTask", { ticketId, technicianId: techId, date: $("boardDate").value, assignTicket: true }, { quiet: true }), {
+          successTitle: source === "scheduled" ? "Task moved" : "All-day task queued",
+          successMessage: `#${ticketId} assigned to ${tech.name}.`,
+          refreshAppointments: true
+        });
+        return;
       }
       if (kind === "noTime") {
         ticket.dateField = selectedDate();
         state.boardItems.push({ ticketId, techId, kind: "noTime", label: ticket.title, date: selectedDate() });
-        callHalo(source === "scheduled" ? "moveToDateOnlyTask" : "assignTicketDateOnly", { ticketId, technicianId: techId, dateFieldValue: $("boardDate").value });
-        toast(source === "scheduled" ? "Task moved" : "Date-only task queued", `#${ticketId} assigned to ${tech.name} for ${$("boardDate").value}.`);
+        renderAll();
+        await persistOptimisticChange(snapshot, callHalo(source === "scheduled" ? "moveToDateOnlyTask" : "assignTicketDateOnly", { ticketId, technicianId: techId, dateFieldValue: $("boardDate").value }, { quiet: true }), {
+          successTitle: source === "scheduled" ? "Task moved" : "Date-only task queued",
+          successMessage: `#${ticketId} assigned to ${tech.name} for ${$("boardDate").value}.`,
+          refreshAppointments: true,
+          refreshTickets: true
+        });
+        return;
       }
       renderAll();
     }
@@ -1861,6 +1873,7 @@ const technicians = [
         return;
       }
 
+      const snapshot = snapshotDispatchState();
       removeBoardItem(ticketId);
       ticket.assignedTo = techId;
       ticket.dateField = selectedDate();
@@ -1877,16 +1890,17 @@ const technicians = [
       renderAll();
 
       const action = item.appointmentId ? "moveAppointmentToDateOnly" : "assignTicketDateOnly";
-      const result = await callHalo(action, {
+      await persistOptimisticChange(snapshot, callHalo(action, {
         appointmentId: item.appointmentId || null,
         ticketId: haloTicketId,
         technicianId: techId,
         dateFieldValue: selectedDate()
+      }, { quiet: true }), {
+        successTitle: "Date-only task updated",
+        successMessage: `#${haloTicketId} assigned to ${tech.name} for ${selectedDate()}.`,
+        refreshAppointments: true,
+        refreshTickets: true
       });
-      toast("Date-only task updated", `#${haloTicketId} assigned to ${tech.name} for ${selectedDate()}.`);
-      if (result?.ok) {
-        setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
-      }
     }
 
     async function moveNoTimeToAppointment(ticketId, techId, time, targetKind) {
@@ -1896,6 +1910,7 @@ const technicians = [
       if (!item || !ticket || !tech) return;
       const haloTicketId = item.haloTicketId || ticket.haloTicketId || ticket.id;
       const duration = targetKind === "timed" ? 30 : 1440;
+      const snapshot = snapshotDispatchState();
       removeBoardItem(ticketId);
       ticket.assignedTo = techId;
       ticket.dateField = "";
@@ -1912,7 +1927,8 @@ const technicians = [
       });
       renderAll();
 
-      const result = await callHalo("createAppointmentFromDateOnly", {
+      const targetLabel = targetKind === "allDay" ? "all-day" : formatTime(time);
+      await persistOptimisticChange(snapshot, callHalo("createAppointmentFromDateOnly", {
         ticketId: haloTicketId,
         technicianId: techId,
         date: selectedDate(),
@@ -1921,12 +1937,12 @@ const technicians = [
         allday: targetKind === "allDay",
         dateFieldValue: "",
         assignTicket: true
+      }, { quiet: true }), {
+        successTitle: "Appointment created",
+        successMessage: `#${haloTicketId} moved to ${targetLabel} for ${tech.name}.`,
+        refreshAppointments: true,
+        refreshTickets: true
       });
-      const targetLabel = targetKind === "allDay" ? "all-day" : formatTime(time);
-      toast("Appointment created", `#${haloTicketId} moved to ${targetLabel} for ${tech.name}.`);
-      if (result?.ok) {
-        setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
-      }
     }
 
     async function moveScheduledItem(ticketId, techId, time, targetKind = "timed") {
@@ -1934,6 +1950,7 @@ const technicians = [
       const ticket = tickets.find(entry => entry.id === ticketId);
       const tech = technicians.find(entry => entry.id === techId);
       if (!item || !ticket || !tech) return;
+      const snapshot = snapshotDispatchState();
       const haloTicketId = item.haloTicketId || ticket.haloTicketId || null;
       const previous = { techId: item.techId, time: item.time, kind: item.kind };
       const nextDuration = targetKind === "timed" && previous.kind === "allDay" ? 30 : item.duration || 30;
@@ -1944,7 +1961,9 @@ const technicians = [
       item.date = selectedDate();
       ticket.assignedTo = techId;
       ticket.dateField = selectedDate();
-      const result = await callHalo("updateAppointment", {
+      const targetLabel = targetKind === "allDay" ? "all-day" : formatTime(time);
+      const techChanged = previous.techId !== techId ? ` and assigned to ${tech.name}` : "";
+      await persistOptimisticChange(snapshot, callHalo("updateAppointment", {
         ticketId: haloTicketId,
         previousTechnicianId: previous.techId,
         technicianId: techId,
@@ -1955,14 +1974,12 @@ const technicians = [
         date: $("boardDate").value,
         allday: targetKind === "allDay",
         assignTicket: previous.techId !== techId
+      }, { quiet: true }), {
+        successTitle: "Appointment updated",
+        successMessage: `#${ticketId} moved to ${targetLabel}${techChanged}.`,
+        refreshAppointments: true
       });
-      const techChanged = previous.techId !== techId ? ` and assigned to ${tech.name}` : "";
-      const targetLabel = targetKind === "allDay" ? "all-day" : formatTime(time);
-      toast("Appointment updated", `#${ticketId} moved to ${targetLabel}${techChanged}.`);
       renderAll();
-      if (result?.ok) {
-        setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
-      }
     }
 
     function openAppointmentModal(ticket, tech, time) {
@@ -2036,18 +2053,20 @@ const technicians = [
       return `${state.apiBaseUrl.replace(/\/$/, "")}/ticket?id=${ticket.id}`;
     }
 
-    function saveAppointment() {
+    async function saveAppointment() {
       if (!state.pendingAppointment) return;
       const { ticketId, techId } = state.pendingAppointment;
       const ticket = tickets.find(item => item.id === ticketId);
       const tech = technicians.find(item => item.id === techId);
       const time = $("modalStart").value;
       const duration = Number($("modalDuration").value);
+      const snapshot = snapshotDispatchState();
       removeBoardItem(ticketId);
       ticket.assignedTo = techId;
       ticket.dateField = selectedDate();
       state.boardItems.push({ ticketId, techId, kind: "timed", time, duration, date: selectedDate() });
-      callHalo("createAppointment", {
+      renderAll();
+      const result = await persistOptimisticChange(snapshot, callHalo("createAppointment", {
         ticketId,
         technicianId: techId,
         date: $("boardDate").value,
@@ -2057,10 +2076,13 @@ const technicians = [
         location: $("modalLocation").value,
         notes: $("modalNotes").value,
         assignTicket: true
+      }, { quiet: true }), {
+        successTitle: "Appointment queued",
+        successMessage: `#${ticketId} scheduled for ${tech.name} at ${formatTime(time)}.`,
+        refreshAppointments: true,
+        refreshTickets: true
       });
-      toast("Appointment queued", `#${ticketId} scheduled for ${tech.name} at ${formatTime(time)}.`);
-      closeAppointmentModal();
-      renderAll();
+      if (result?.ok !== false) closeAppointmentModal();
     }
 
     function addReportList() {
@@ -2520,6 +2542,34 @@ const technicians = [
 
     function debugLog(message, data) {
       if (debugEnabled) console.log(message, data);
+    }
+
+    function snapshotDispatchState() {
+      return {
+        boardItems: structuredClone(state.boardItems),
+        tickets: structuredClone(tickets)
+      };
+    }
+
+    function restoreDispatchState(snapshot) {
+      state.boardItems.splice(0, state.boardItems.length, ...snapshot.boardItems);
+      tickets.splice(0, tickets.length, ...snapshot.tickets);
+      renderAll();
+    }
+
+    async function persistOptimisticChange(snapshot, haloPromise, options = {}) {
+      const result = await haloPromise;
+      if (state.apiProxyUrl && result?.ok === false) {
+        restoreDispatchState(snapshot);
+        toast("Halo update failed", result.error || "The board was restored because Halo rejected the update.");
+        return result;
+      }
+      if (options.successTitle) toast(options.successTitle, options.successMessage || "");
+      if (result?.ok) {
+        if (options.refreshAppointments) setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
+        if (options.refreshTickets) setTimeout(() => loadHaloTickets({ quiet: true }), 800);
+      }
+      return result;
     }
 
     function renderAll() {

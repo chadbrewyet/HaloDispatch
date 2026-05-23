@@ -22,3 +22,7 @@ HALO_DISPATCH_DATE_FIELD_NAME = "CFTaskWithoutTimeDate"
 
 # Optional. Leave blank or remove if Halo should use its default appointment type.
 HALO_APPOINTMENT_TYPE_ID = ""
+
+# Optional pagination controls. Halo Tickets documents page_size maximum 100.
+HALO_PAGE_SIZE = "100"
+HALO_MAX_PAGES = "50"

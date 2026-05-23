@@ -23,6 +23,9 @@ const excludedTicketTypeNames = new Set([
   "quick quote"
 ]);
 
+const DEFAULT_PAGE_SIZE = 100;
+const DEFAULT_MAX_PAGES = 50;
+
 export default {
   async fetch(request, env) {
     if (request.method === "OPTIONS") {
@@ -177,12 +180,9 @@ async function handleCreateAppointmentFromDateOnly(payload, env) {
 
 async function handleTicketTypeLoad(payload, env) {
   const params = new URLSearchParams({
-    page_size: "1000",
-    count: "1000"
+    count: String(pageSize(env))
   });
-  const haloPath = `/api/TicketType?${params.toString()}`;
-  const response = await haloRequest(env, haloPath, { method: "GET" });
-  const rawTypes = unwrapList(response.data);
+  const { records: rawTypes, meta } = await haloGetAllPages(env, "/api/TicketType", params);
   const ticketTypes = rawTypes
     .map(normalizeTicketType)
     .filter(Boolean)
@@ -192,9 +192,10 @@ async function handleTicketTypeLoad(payload, env) {
     ok: true,
     data: { ticketTypes },
     meta: {
-      haloPath,
+      haloPath: meta.firstPath,
       rawCount: rawTypes.length,
       normalizedCount: ticketTypes.length,
+      pages: meta.pages,
       excludedTypes: []
     }
   };
@@ -209,8 +210,7 @@ async function handleTicketLoad(payload, env) {
     includetickettype: "true",
     includestatus: "true",
     include_custom_fields: env.HALO_DISPATCH_DATE_FIELD_ID || "",
-    page_size: "500",
-    count: "500",
+    count: String(pageSize(env)),
     order: "dateoccured",
     orderdesc: "true"
   });
@@ -218,10 +218,8 @@ async function handleTicketLoad(payload, env) {
     params.set("requesttype", ticketTypeIds.join(","));
   }
 
-  const haloPath = `/api/Tickets?${params.toString()}`;
-  debugLog(env, "loadTickets request", { ticketTypeIds, haloPath });
-  const response = await haloRequest(env, haloPath, { method: "GET" });
-  const rawTickets = unwrapList(response.data);
+  const { records: rawTickets, meta } = await haloGetAllPages(env, "/api/Tickets", params);
+  debugLog(env, "loadTickets request", { ticketTypeIds, haloPath: meta.firstPath, pages: meta.pages });
   const tickets = rawTickets
     .map(ticket => normalizeTicket(ticket, env))
     .filter(Boolean)
@@ -233,9 +231,10 @@ async function handleTicketLoad(payload, env) {
     ok: true,
     data: { tickets },
     meta: {
-      haloPath,
+      haloPath: meta.firstPath,
       rawCount: rawTickets.length,
       normalizedCount: tickets.length,
+      pages: meta.pages,
       selectedTicketTypes: ticketTypeIds,
       excludedTypes: Array.from(excludedTicketTypeNames)
     }
@@ -302,20 +301,19 @@ async function handleAppointmentLoad(payload, env) {
     showall: "true",
     showappointments: "true",
     excluderecurringmaster: "true",
-    page_size: "500"
+    count: String(pageSize(env))
   });
 
-  const haloPath = `/api/Appointment?${params.toString()}`;
-  debugLog(env, "loadAppointments request", { date, agentIds, haloPath });
+  const { records: rawAppointments, meta } = await haloGetAllPages(env, "/api/Appointment", params);
+  debugLog(env, "loadAppointments request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages });
 
-  const response = await haloRequest(env, haloPath, { method: "GET" });
-  const rawAppointments = unwrapList(response.data);
   const appointments = rawAppointments
     .flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
     .filter(Boolean);
   debugLog(env, "loadAppointments response", {
     date,
     agentIds,
+    pages: meta.pages,
     rawCount: rawAppointments.length,
     normalizedCount: appointments.length,
     normalizedSample: appointments.slice(0, 5)
@@ -325,9 +323,10 @@ async function handleAppointmentLoad(payload, env) {
     ok: true,
     data: { appointments },
     meta: {
-      haloPath,
+      haloPath: meta.firstPath,
       rawCount: rawAppointments.length,
-      normalizedCount: appointments.length
+      normalizedCount: appointments.length,
+      pages: meta.pages
     }
   };
 }
@@ -348,13 +347,10 @@ async function handleDateOnlyTaskLoad(payload, env) {
     includeclosed: "false",
     includestatus: "true",
     includetickettype: "true",
-    page_size: "500",
-    count: "500"
+    count: String(pageSize(env))
   });
-  const haloPath = `/api/Tickets?${params.toString()}`;
-  debugLog(env, "loadDateOnlyTasks request", { date, agentIds, haloPath });
-  const response = await haloRequest(env, haloPath, { method: "GET" });
-  const rawTickets = unwrapList(response.data);
+  const { records: rawTickets, meta } = await haloGetAllPages(env, "/api/Tickets", params);
+  debugLog(env, "loadDateOnlyTasks request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages });
   const normalizedTasks = rawTickets
     .map(ticket => normalizeDateOnlyTicket(ticket, dateFieldId))
     .filter(Boolean)
@@ -367,10 +363,11 @@ async function handleDateOnlyTaskLoad(payload, env) {
     ok: true,
     data: { tasks, pastTasks },
     meta: {
-      haloPath,
+      haloPath: meta.firstPath,
       rawCount: rawTickets.length,
       normalizedCount: tasks.length,
-      pastCount: pastTasks.length
+      pastCount: pastTasks.length,
+      pages: meta.pages
     }
   };
 }
@@ -785,6 +782,43 @@ function unwrapList(data) {
   if (Array.isArray(data?.records)) return data.records;
   if (Array.isArray(data?.data)) return data.data;
   return [];
+}
+
+async function haloGetAllPages(env, path, params = new URLSearchParams(), options = {}) {
+  const size = pageSize(env, options.pageSize);
+  const maxPages = maxPageCount(env, options.maxPages);
+  const records = [];
+  let firstPath = "";
+  let pages = 0;
+
+  for (let page = 1; page <= maxPages; page += 1) {
+    const pageParams = new URLSearchParams(params);
+    pageParams.set("pageinate", "true");
+    pageParams.set("page_no", String(page));
+    pageParams.set("page_size", String(size));
+    pageParams.set("count", String(size));
+
+    const haloPath = `${path}?${pageParams.toString()}`;
+    if (!firstPath) firstPath = haloPath;
+    const response = await haloRequest(env, haloPath, { method: "GET" });
+    const pageRecords = unwrapList(response.data);
+    records.push(...pageRecords);
+    pages = page;
+
+    if (pageRecords.length < size) break;
+  }
+
+  return { records, meta: { firstPath, pages, pageSize: size, maxPages } };
+}
+
+function pageSize(env, requested) {
+  const value = Number(requested || env.HALO_PAGE_SIZE || DEFAULT_PAGE_SIZE);
+  return Math.min(DEFAULT_PAGE_SIZE, Math.max(1, Number.isFinite(value) ? value : DEFAULT_PAGE_SIZE));
+}
+
+function maxPageCount(env, requested) {
+  const value = Number(requested || env.HALO_MAX_PAGES || DEFAULT_MAX_PAGES);
+  return Math.max(1, Number.isFinite(value) ? value : DEFAULT_MAX_PAGES);
 }
 
 function compactObject(value) {
