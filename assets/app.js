@@ -21,6 +21,7 @@ const technicians = [
     const attentionTicketIds = new Set();
     const debugEnabled = new URLSearchParams(window.location.search).get("debug") === "true"
       || localStorage.getItem("dispatchBoardDebug") === "true";
+    const DEFAULT_WORKER_API_URL = "https://halo-dispatch-api.chadbrewyet.workers.dev";
 
     const state = {
       selectedTeams: [],
@@ -55,7 +56,8 @@ const technicians = [
       ticketPanelOpen: false,
       ticketPanelWidth: 360,
       apiBaseUrl: "https://gagepsa.halopsa.com/ticket?id=",
-      apiProxyUrl: "",
+      apiProxyUrl: DEFAULT_WORKER_API_URL,
+      mockMode: false,
       appointmentRefreshMinutes: 5,
       appointmentRefreshTimer: null,
       ticketRefreshMinutes: 2,
@@ -97,7 +99,7 @@ const technicians = [
 
     const $ = (id) => document.getElementById(id);
 
-    function init() {
+    async function init() {
       const today = new Date();
       $("boardDate").value = today.toISOString().slice(0, 10);
       state.boardItems.forEach(item => {
@@ -107,6 +109,7 @@ const technicians = [
       });
       loadLocalSettings();
       applyIframeParams();
+      applyConnectionState();
       applyTheme();
       renderTeamSelect();
       renderTechPicker();
@@ -123,11 +126,12 @@ const technicians = [
       resetAppointmentRefreshTimer();
       resetTicketRefreshTimer();
       resetCurrentTimeTimer();
-      toast("Ready", "Dispatch board loaded. HaloPSA actions run in mock mode until a Worker API URL is saved.");
-      loadHaloTechnicians();
-      loadHaloTicketTypes();
-      loadHaloTickets({ quiet: true });
-      loadHaloStorage({ quiet: true });
+      toast("Ready", state.mockMode ? "Dispatch board loaded in mock mode." : "Dispatch board connected to HaloPSA.");
+      await loadHaloTechnicians({ quiet: true, skipAppointments: true });
+      await loadHaloTicketTypes();
+      await loadHaloStorage({ quiet: true });
+      await loadHaloTickets({ quiet: true });
+      await loadHaloAppointments({ quiet: true });
     }
 
     function bindEvents() {
@@ -194,6 +198,11 @@ const technicians = [
       wireSettingsAccordion();
       $("saveApiBtn").addEventListener("click", saveApiSettings);
       $("testWorkerBtn").addEventListener("click", testWorkerConnection);
+      $("mockModeCheck").addEventListener("change", () => {
+        state.mockMode = $("mockModeCheck").checked;
+        applyConnectionState();
+        saveApiSettings();
+      });
       $("appointmentRefreshSelect").addEventListener("change", () => {
         state.appointmentRefreshMinutes = Number($("appointmentRefreshSelect").value);
         saveLocalSettings();
@@ -281,11 +290,8 @@ const technicians = [
         $("ticketRefreshSelect").value = String(state.ticketRefreshMinutes);
         if (saved.apiBaseUrl) state.apiBaseUrl = saved.apiBaseUrl;
         $("apiBaseUrl").value = state.apiBaseUrl;
-        if (saved.apiProxyUrl) {
-          state.apiProxyUrl = saved.apiProxyUrl;
-          $("apiProxyUrl").value = saved.apiProxyUrl;
-          $("apiState").textContent = "HaloPSA Worker connected";
-        }
+        if (saved.apiProxyUrl !== undefined) state.apiProxyUrl = saved.apiProxyUrl || DEFAULT_WORKER_API_URL;
+        if (saved.mockMode !== undefined) state.mockMode = Boolean(saved.mockMode);
       } catch (error) {
         console.warn(error);
       }
@@ -314,6 +320,7 @@ const technicians = [
         ticketPanelWidth: state.ticketPanelWidth,
         apiBaseUrl: state.apiBaseUrl,
         apiProxyUrl: state.apiProxyUrl,
+        mockMode: state.mockMode,
         appointmentRefreshMinutes: state.appointmentRefreshMinutes,
         ticketRefreshMinutes: state.ticketRefreshMinutes,
         selectedTeams: state.selectedTeams,
@@ -355,10 +362,11 @@ const technicians = [
     function applyDispatchPreferencePayload(preferences = {}) {
       const keepConnection = {
         apiBaseUrl: state.apiBaseUrl,
-        apiProxyUrl: state.apiProxyUrl
+        apiProxyUrl: state.apiProxyUrl,
+        mockMode: state.mockMode,
+        currentAgentId: state.currentAgentId
       };
       Object.assign(state, preferences, keepConnection);
-      if (state.selectedTechs.length && !state.currentAgentId) state.currentAgentId = state.selectedTechs[0];
       $("colorBySelect").value = state.colorBy;
       $("show24HoursCheck").checked = state.show24Hours;
       $("calendarStartTime").value = state.calendarStartTime;
@@ -383,8 +391,21 @@ const technicians = [
       return String(state.currentAgentId || "").trim();
     }
 
+    function effectiveWorkerUrl() {
+      return state.mockMode ? "" : (state.apiProxyUrl || DEFAULT_WORKER_API_URL);
+    }
+
+    function applyConnectionState() {
+      if (!state.apiProxyUrl) state.apiProxyUrl = DEFAULT_WORKER_API_URL;
+      $("apiProxyUrl").value = state.apiProxyUrl;
+      $("mockModeCheck").checked = state.mockMode;
+      $("apiState").textContent = state.mockMode ? "HaloPSA mock mode" : "HaloPSA Worker connected";
+      $("apiProxyUrl").disabled = state.mockMode;
+      $("testWorkerBtn").disabled = state.mockMode;
+    }
+
     function scheduleHaloPreferenceSave() {
-      if (!state.haloStorageLoaded || state.loadingHaloStorage || !state.apiProxyUrl || !currentStorageAgentId()) return;
+      if (!state.haloStorageLoaded || state.loadingHaloStorage || !effectiveWorkerUrl() || !currentStorageAgentId()) return;
       clearTimeout(state.haloStorageSaveTimer);
       state.haloStorageSaveTimer = setTimeout(() => {
         saveHaloUserPreferences({ quiet: true });
@@ -2385,12 +2406,13 @@ const technicians = [
 
     function saveApiSettings() {
       state.apiBaseUrl = $("apiBaseUrl").value.trim();
-      state.apiProxyUrl = $("apiProxyUrl").value.trim();
-      $("apiState").textContent = state.apiProxyUrl ? "HaloPSA Worker connected" : "HaloPSA mock mode";
+      state.apiProxyUrl = $("apiProxyUrl").value.trim() || DEFAULT_WORKER_API_URL;
+      state.mockMode = $("mockModeCheck").checked;
+      applyConnectionState();
       saveLocalSettings();
       resetAppointmentRefreshTimer();
       resetTicketRefreshTimer();
-      toast("Connection settings saved", state.apiProxyUrl || "Mock mode remains active until the Worker URL is added.");
+      toast("Connection settings saved", state.mockMode ? "Mock mode is active." : state.apiProxyUrl);
       loadHaloStorage({ quiet: true });
       loadHaloTechnicians();
       loadHaloTicketTypes();
@@ -2398,7 +2420,7 @@ const technicians = [
     }
 
     async function loadHaloStorage(options = {}) {
-      if (!state.apiProxyUrl) return;
+      if (!effectiveWorkerUrl()) return;
       const result = await callHalo("loadDispatchStorage", {
         agentId: currentStorageAgentId()
       }, { quiet: true });
@@ -2430,7 +2452,7 @@ const technicians = [
     }
 
     async function saveHaloUserPreferences(options = {}) {
-      if (!state.apiProxyUrl) return;
+      if (!effectiveWorkerUrl()) return;
       if (!currentStorageAgentId()) {
         if (!options.quiet) toast("Preferences not synced", "Pass viewer_agent_id in the iframe URL before saving user preferences.");
         return;
@@ -2444,7 +2466,7 @@ const technicians = [
     }
 
     async function saveHaloSavedFilter(name, filter) {
-      if (!state.apiProxyUrl || !name) return;
+      if (!effectiveWorkerUrl() || !name) return;
       const result = await callHalo("saveDispatchSavedFilter", {
         agentId: currentStorageAgentId(),
         name,
@@ -2454,7 +2476,7 @@ const technicians = [
     }
 
     async function deleteHaloSavedFilter(name) {
-      if (!state.apiProxyUrl || !name) return;
+      if (!effectiveWorkerUrl() || !name) return;
       const result = await callHalo("deleteDispatchSavedFilter", {
         agentId: currentStorageAgentId(),
         name
@@ -2462,26 +2484,26 @@ const technicians = [
       if (result?.ok === false) toast("Filter sync failed", result.error || "The filter was removed locally but not in Halo.");
     }
 
-    async function loadHaloTechnicians() {
-      if (!state.apiProxyUrl) return;
+    async function loadHaloTechnicians(options = {}) {
+      if (!effectiveWorkerUrl()) return;
       const workerReady = await testWorkerConnection({ quiet: true });
       if (!workerReady) return;
       const result = await callHalo("loadTechnicians", {}, { quiet: true });
       const data = result?.data;
       if (!data?.technicians?.length) {
-        toast("Halo names not loaded", "No agents matched the selected teams and in_section rule.");
+        if (!options.quiet) toast("Halo names not loaded", "No agents matched the selected teams and in_section rule.");
         return;
       }
       syncHaloTechnicians(data);
       renderTeamSelect();
       renderTechPicker();
       renderBoard();
-      toast("Halo names loaded", `${data.technicians.length} agents are available for dispatch.`);
-      loadHaloAppointments();
+      if (!options.quiet) toast("Halo names loaded", `${data.technicians.length} agents are available for dispatch.`);
+      if (!options.skipAppointments) loadHaloAppointments();
     }
 
     async function loadHaloTicketTypes() {
-      if (!state.apiProxyUrl) return;
+      if (!effectiveWorkerUrl()) return;
       const result = await callHalo("loadTicketTypes", {}, { quiet: true });
       if (!result?.ok) return;
       syncHaloTicketTypes(result.data?.ticketTypes || []);
@@ -2499,8 +2521,8 @@ const technicians = [
     }
 
     async function loadHaloTickets(options = {}) {
-      if (!state.apiProxyUrl) {
-        if (!options.quiet) toast("Worker URL missing", "Add the Cloudflare Worker URL in Settings first.");
+      if (!effectiveWorkerUrl()) {
+        if (!options.quiet) toast("Mock mode active", "Disable mock mode in Settings to load Halo tickets.");
         return;
       }
       const result = await callHalo("loadTickets", {
@@ -2574,7 +2596,7 @@ const technicians = [
     }
 
     async function loadHaloAppointments(options = {}) {
-      if (!state.apiProxyUrl || !state.selectedTechs.length) return;
+      if (!effectiveWorkerUrl() || !state.selectedTechs.length) return;
       const result = await callHalo("loadAppointments", {
         date: selectedDate(),
         technicianIds: state.selectedTechs
@@ -2624,7 +2646,7 @@ const technicians = [
     }
 
     async function loadHaloDateOnlyTasks(options = {}) {
-      if (!state.apiProxyUrl || !state.selectedTechs.length) return;
+      if (!effectiveWorkerUrl() || !state.selectedTechs.length) return;
       const result = await callHalo("loadDateOnlyTasks", {
         date: selectedDate(),
         technicianIds: state.selectedTechs
@@ -2776,8 +2798,9 @@ const technicians = [
     }
 
     async function testWorkerConnection(options = {}) {
-      if (!state.apiProxyUrl) {
-        if (!options.quiet) toast("Worker URL missing", "Add the Cloudflare Worker URL in Settings first.");
+      if (!effectiveWorkerUrl()) {
+        $("apiState").textContent = "HaloPSA mock mode";
+        if (!options.quiet) toast("Mock mode active", "Disable mock mode in Settings to connect to HaloPSA.");
         return false;
       }
 
@@ -2807,12 +2830,12 @@ const technicians = [
       };
       const request = {
         action,
-        proxyUrl: state.apiProxyUrl || "(mock)",
+        proxyUrl: effectiveWorkerUrl() || "(mock)",
         payload: enrichedPayload,
         timestamp: new Date().toISOString()
       };
       debugLog("HaloPSA action", request);
-      if (!state.apiProxyUrl) return request;
+      if (!effectiveWorkerUrl()) return request;
 
       try {
         return await fetchWorkerJson("/api/halo/action", {
@@ -2837,7 +2860,7 @@ const technicians = [
     }
 
     function workerBaseUrl() {
-      const url = state.apiProxyUrl.trim().replace(/\/$/, "");
+      const url = effectiveWorkerUrl().trim().replace(/\/$/, "");
       if (!/^https?:\/\//i.test(url)) {
         throw new Error("Worker URL must start with https://");
       }
@@ -2870,7 +2893,7 @@ const technicians = [
 
     async function persistOptimisticChange(snapshot, haloPromise, options = {}) {
       const result = await haloPromise;
-      if (state.apiProxyUrl && result?.ok === false) {
+      if (effectiveWorkerUrl() && result?.ok === false) {
         restoreDispatchState(snapshot);
         toast("Halo update failed", result.error || "The board was restored because Halo rejected the update.");
         return result;

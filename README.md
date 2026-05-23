@@ -60,7 +60,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    wrangler deploy
    ```
 
-7. In the dashboard, open Settings and set `Worker API URL` to the deployed Worker URL.
+7. The dashboard defaults to `https://halo-dispatch-api.chadbrewyet.workers.dev/` for live HaloPSA access. Open Settings only if you need to override the Worker URL or enable `Mock mode` for local UI testing without Halo calls.
 
 ## Automatic Worker Deploys
 

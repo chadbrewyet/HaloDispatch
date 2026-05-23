@@ -20,7 +20,7 @@
         <button id="todayBtn">Today</button>
       </div>
       <div class="api-status">
-        <span class="api-pill" id="apiState">HaloPSA mock mode</span>
+        <span class="api-pill" id="apiState">HaloPSA Worker connected</span>
         <button id="refreshBtn" class="primary compact-action">Refresh Tickets</button>
       </div>
       <div class="view-controls">
@@ -146,6 +146,10 @@
           <label>Worker API URL</label>
           <input id="apiProxyUrl" placeholder="https://halo-dispatch-api.your-subdomain.workers.dev">
         </div>
+        <label class="toggle-field">
+          <input id="mockModeCheck" type="checkbox">
+          <span>Mock mode</span>
+        </label>
         <div class="field">
           <label>Halo Ticket URL Prefix</label>
           <input id="apiBaseUrl" placeholder="https://gagepsa.halopsa.com/ticket?id=">
@@ -176,7 +180,7 @@
             <option value="15">Every 15 minutes</option>
           </select>
         </div>
-        <button id="saveApiBtn" class="primary">Save Connection Draft</button>
+        <button id="saveApiBtn" class="primary">Save Connection</button>
         <button id="testWorkerBtn" type="button">Test Worker Connection</button>
         <div class="empty" style="text-align:left;">
           All-day drop: create all-day task, assign technician.<br>
