@@ -10,6 +10,18 @@ Dispatch dashboard prototype for assigning HaloPSA service tickets to technician
 - `worker/halo-proxy.js` - Cloudflare Worker API proxy scaffold.
 - `wrangler.toml.example` - starter Cloudflare Worker config.
 
+## Architecture Notes
+
+- The frontend stores temporary board preferences in browser `localStorage`.
+- The Cloudflare Worker is the only component that should call HaloPSA with API credentials.
+- The Worker intentionally exposes only explicit dashboard actions. Do not add a generic Halo API passthrough route.
+- The dashboard accepts iframe query parameters for initial context:
+  - `agent_id=14` or `agent_ids=14,17`
+  - `team_id=3` or `team_ids=1,3`
+  - `theme=light|dark`
+  - `orientation=horizontal|vertical`
+- Query parameters seed the local board state. Long-term shared/user settings should move into Halo-backed storage.
+
 ## Recommended Deployment
 
 Use GitHub Pages for the frontend and Cloudflare Workers for HaloPSA API calls.
@@ -77,6 +89,7 @@ The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
 Moving an already scheduled appointment to a new time, technician, all-day section, or without-time section uses the loaded Halo `appointment_id` and updates Halo directly.
 
 Appointment refresh can be configured in Settings. The default is every 5 minutes, with a manual-only option available.
+Ticket list refresh can also be configured in Settings. The default is every 2 minutes, with a manual-only option available.
 
 Current Halo configuration:
 
@@ -88,8 +101,70 @@ Current Halo configuration:
 
 Technician and team display names are loaded from `GET /api/Agent`. A technician is included when the agent has a `teams` array entry where `in_section` is `true`; the Settings drawer filters agents by selected team memberships.
 
+## Recommended Halo Storage Tables
+
+Use these as a starting point if you create Halo Custom Tables for shared configuration.
+
+### DispatchBoardUserPreferences
+
+One row per Halo agent.
+
+- `agent_id` integer, unique
+- `theme` text
+- `orientation` text
+- `selected_team_ids_json` long text
+- `selected_agent_ids_json` long text
+- `ticket_panel_pinned` boolean
+- `ticket_panel_width` integer
+- `calendar_start_time` text
+- `calendar_end_time` text
+- `tech_themes_json` long text
+- `visible_ticket_fields_json` long text
+- `created_at` date/time
+- `updated_at` date/time
+
+### DispatchBoardSavedFilters
+
+Shared ticket-list definitions available to all dispatch users.
+
+- `filter_name` text, unique
+- `list_title` text
+- `color` text
+- `conditions_json` long text
+- `created_by_agent_id` integer
+- `updated_by_agent_id` integer
+- `is_active` boolean
+- `created_at` date/time
+- `updated_at` date/time
+
+Example `conditions_json`:
+
+```json
+[
+  {
+    "joiner": "and",
+    "mode": "include",
+    "field": "team",
+    "values": ["3", "11"]
+  },
+  {
+    "joiner": "and",
+    "mode": "exclude",
+    "field": "status",
+    "values": ["Closed", "Completed"]
+  }
+]
+```
+
+## Production Hardening Notes
+
+- Add a Worker-side authorization check before broad rollout. Good options are Cloudflare Access, a Halo-issued signed iframe token, or another short-lived server-side validation flow.
+- Keep `HALO_DEBUG_LOGS` unset or false in production. Enable it temporarily only while troubleshooting Worker/Halo payload mappings.
+- Consider storing saved filters and user preferences in Halo custom tables instead of browser `localStorage` once the table endpoints are confirmed.
+
 ## Still Needed From HaloPSA
 
 To finish the live ticket views, we still need:
 
-- per-section ticket list filter options
+- final custom-table API endpoint names for shared filters and user preferences
+- the custom field ID for `Service Zone` if Halo does not return it by name in normal ticket loads

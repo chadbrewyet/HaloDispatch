@@ -1,3 +1,10 @@
+/*
+ * Cloudflare Worker facade for HaloPSA.
+ *
+ * Keep this file as the only place that knows Halo credentials. The frontend
+ * calls the small action surface below; this Worker normalizes Halo payloads
+ * into the dashboard model and maps dashboard writes back to Halo endpoints.
+ */
 const tokenCache = {
   accessToken: "",
   expiresAt: 0
@@ -32,11 +39,6 @@ export default {
       if (url.pathname === "/api/halo/action" && request.method === "POST") {
         const body = await request.json();
         return json(await handleDashboardAction(body, env));
-      }
-
-      if (url.pathname.startsWith("/api/halo/") && request.method === "GET") {
-        const haloPath = url.pathname.replace("/api/halo", "/api");
-        return json(await haloRequest(env, haloPath + url.search, { method: "GET" }));
       }
 
       return json({ ok: false, error: "Not found" }, 404);
@@ -217,7 +219,7 @@ async function handleTicketLoad(payload, env) {
   }
 
   const haloPath = `/api/Tickets?${params.toString()}`;
-  console.log("loadTickets request", JSON.stringify({ ticketTypeIds, haloPath }));
+  debugLog(env, "loadTickets request", { ticketTypeIds, haloPath });
   const response = await haloRequest(env, haloPath, { method: "GET" });
   const rawTickets = unwrapList(response.data);
   const tickets = rawTickets
@@ -304,31 +306,20 @@ async function handleAppointmentLoad(payload, env) {
   });
 
   const haloPath = `/api/Appointment?${params.toString()}`;
-  console.log("loadAppointments request", JSON.stringify({ date, agentIds, haloPath }));
+  debugLog(env, "loadAppointments request", { date, agentIds, haloPath });
 
   const response = await haloRequest(env, haloPath, { method: "GET" });
   const rawAppointments = unwrapList(response.data);
   const appointments = rawAppointments
     .flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
     .filter(Boolean);
-  console.log("loadAppointments response", JSON.stringify({
+  debugLog(env, "loadAppointments response", {
     date,
     agentIds,
     rawCount: rawAppointments.length,
     normalizedCount: appointments.length,
-    sample: rawAppointments.slice(0, 3).map(appointment => ({
-      id: appointment.id || appointment.appointment_id,
-      ticket_id: appointment.ticket_id,
-      agent_id: appointment.agent_id,
-      agents: Array.isArray(appointment.agents) ? appointment.agents.slice(0, 3) : undefined,
-      start_date: appointment.start_date,
-      end_date: appointment.end_date,
-      allday: appointment.allday,
-      status: appointment.status || appointment.appointment_status || appointment.complete_status,
-      subject: appointment.subject
-    })),
     normalizedSample: appointments.slice(0, 5)
-  }));
+  });
 
   return {
     ok: true,
@@ -361,7 +352,7 @@ async function handleDateOnlyTaskLoad(payload, env) {
     count: "500"
   });
   const haloPath = `/api/Tickets?${params.toString()}`;
-  console.log("loadDateOnlyTasks request", JSON.stringify({ date, agentIds, haloPath }));
+  debugLog(env, "loadDateOnlyTasks request", { date, agentIds, haloPath });
   const response = await haloRequest(env, haloPath, { method: "GET" });
   const rawTickets = unwrapList(response.data);
   const normalizedTasks = rawTickets
@@ -590,7 +581,7 @@ function appointmentUpdatePayload(payload, env) {
     allday: allDay,
     _force: true
   });
-  console.log("updateAppointment payload", JSON.stringify(body));
+  debugLog(env, "updateAppointment payload", body);
   return body;
 }
 
@@ -861,6 +852,11 @@ function validateEnv(env) {
   if (missing.length) {
     throw new Error(`Missing Worker secret/variable: ${missing.join(", ")}`);
   }
+}
+
+function debugLog(env, message, data = {}) {
+  if (!isTrue(env.HALO_DEBUG_LOGS)) return;
+  console.log(message, JSON.stringify(data));
 }
 
 function json(data, status = 200) {

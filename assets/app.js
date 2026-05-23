@@ -1,3 +1,10 @@
+/*
+ * Halo Dispatch Board frontend.
+ *
+ * The browser owns presentation state, drag/drop state, and user preferences.
+ * Halo writes and credentialed reads go through the Cloudflare Worker; do not
+ * add Halo secrets or direct OAuth flows to this file.
+ */
 const technicians = [
     ];
 
@@ -12,6 +19,8 @@ const technicians = [
     const ticketTypes = [];
     const knownTicketIds = new Set();
     const attentionTicketIds = new Set();
+    const debugEnabled = new URLSearchParams(window.location.search).get("debug") === "true"
+      || localStorage.getItem("dispatchBoardDebug") === "true";
 
     const state = {
       selectedTeams: [],
@@ -90,6 +99,7 @@ const technicians = [
         if (ticket && !ticket.dateField) ticket.dateField = item.date;
       });
       loadLocalSettings();
+      applyIframeParams();
       applyTheme();
       renderTeamSelect();
       renderTechPicker();
@@ -303,6 +313,26 @@ const technicians = [
         selectedTicketTypes: state.selectedTicketTypes,
         selectionDefaultsVersion: 1
       }));
+    }
+
+    function applyIframeParams() {
+      const params = new URLSearchParams(window.location.search);
+      const agentIds = splitParamList(params.get("agent_ids") || params.get("agent_id"));
+      const teamIds = splitParamList(params.get("team_ids") || params.get("team_id"));
+      const theme = params.get("theme");
+      const orientation = params.get("orientation");
+
+      if (agentIds.length) state.selectedTechs = agentIds;
+      if (teamIds.length) state.selectedTeams = teamIds;
+      if (theme === "light" || theme === "dark") state.theme = theme;
+      if (orientation === "horizontal" || orientation === "vertical") state.orientation = orientation;
+    }
+
+    function splitParamList(value) {
+      return String(value || "")
+        .split(",")
+        .map(entry => entry.trim())
+        .filter(Boolean);
     }
 
     function applyTheme() {
@@ -2112,10 +2142,7 @@ const technicians = [
       const workerReady = await testWorkerConnection({ quiet: true });
       if (!workerReady) return;
       const result = await callHalo("loadTechnicians", {}, { quiet: true });
-      let data = result?.data;
-      if (!data?.technicians?.length) {
-        data = await loadHaloTechniciansFromAgentEndpoint();
-      }
+      const data = result?.data;
       if (!data?.technicians?.length) {
         toast("Halo names not loaded", "No agents matched the selected teams and in_section rule.");
         return;
@@ -2154,7 +2181,7 @@ const technicians = [
       const result = await callHalo("loadTickets", {
         ticketTypeIds: state.selectedTicketTypes
       }, { quiet: true });
-      console.log("HaloPSA ticket load result", result?.meta || result);
+      debugLog("HaloPSA ticket load result", result?.meta || result);
       if (!result?.ok) return;
       syncHaloTickets(result.data?.tickets || []);
       renderReportLists();
@@ -2177,11 +2204,7 @@ const technicians = [
         knownTicketIds.add(Number(normalized.id));
         const existing = tickets.find(item => item.id === normalized.id);
         if (existing) {
-          Object.assign(existing, normalized, {
-            dateField: existing.dateField || normalized.dateField,
-            assignedTo: existing.assignedTo || normalized.assignedTo,
-            completed: existing.completed || normalized.completed
-          });
+          Object.assign(existing, normalized);
           return;
         }
         tickets.push(normalized);
@@ -2230,12 +2253,12 @@ const technicians = [
         date: selectedDate(),
         technicianIds: state.selectedTechs
       }, { quiet: true });
-      console.log("HaloPSA appointment load result", result?.meta || result);
+      debugLog("HaloPSA appointment load result", result?.meta || result);
       if (!result?.ok) return;
       syncHaloAppointments(result.data?.appointments || []);
       loadHaloDateOnlyTasks({ quiet: true });
       renderBoard();
-      console.log("HaloPSA board appointment sync", appointmentVisibilitySummary(result.data?.appointments || []));
+      debugLog("HaloPSA board appointment sync", appointmentVisibilitySummary(result.data?.appointments || []));
       if (!options.quiet && result.data?.appointments?.length) {
         toast("Halo appointments loaded", `${result.data.appointments.length} calendar items matched this view.`);
       }
@@ -2280,7 +2303,7 @@ const technicians = [
         date: selectedDate(),
         technicianIds: state.selectedTechs
       }, { quiet: true });
-      console.log("HaloPSA date-only task load result", result?.meta || result);
+      debugLog("HaloPSA date-only task load result", result?.meta || result);
       if (!result?.ok) return;
       syncHaloDateOnlyTasks(result.data?.tasks || [], result.data?.pastTasks || []);
       renderBoard();
@@ -2387,55 +2410,6 @@ const technicians = [
       });
     }
 
-    async function loadHaloTechniciansFromAgentEndpoint() {
-      try {
-        const result = await fetchWorkerJson("/api/halo/Agent");
-        return normalizeHaloAgents(result.data || result);
-      } catch (error) {
-        console.error(error);
-        toast("Halo technician load failed", friendlyFetchError(error));
-        return null;
-      }
-    }
-
-    function normalizeHaloAgents(data) {
-      const agents = unwrapList(data);
-      const teamMap = new Map();
-
-      const matchedTechnicians = agents
-        .map(agent => {
-          const memberships = Array.isArray(agent.teams) ? agent.teams : [];
-          memberships.forEach(team => {
-            const teamId = String(team.team_id ?? team.id ?? "");
-            if (!teamId) return;
-            teamMap.set(teamId, {
-              id: teamId,
-              name: team.name || team.team || team.team_name || (String(agent.team_id) === teamId ? agent.team : "") || `Team ${teamId}`
-            });
-          });
-          const matchingTeams = memberships.filter(team => {
-            return String(team.team_id ?? team.id ?? "") && isTrue(team.in_section);
-          });
-          if (!matchingTeams.length) return null;
-
-          const primaryTeam = matchingTeams[0];
-          const primaryTeamId = String(primaryTeam.team_id ?? primaryTeam.id ?? "");
-          return {
-            id: String(agent.id),
-            name: agent.name || agent.display_name || agent.email || `Technician ${agent.id}`,
-            teamId: primaryTeamId,
-            team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`,
-            teamIds: matchingTeams.map(team => String(team.team_id ?? team.id ?? "")).filter(Boolean)
-          };
-        })
-        .filter(Boolean);
-
-      return {
-        technicians: matchedTechnicians,
-        teams: Array.from(teamMap.values()).sort((a, b) => Number(a.id) - Number(b.id))
-      };
-    }
-
     function syncHaloTechnicians(data) {
       technicians.splice(0, technicians.length, ...data.technicians.map(tech => ({
         id: String(tech.id),
@@ -2471,10 +2445,6 @@ const technicians = [
       return [];
     }
 
-    function isTrue(value) {
-      return value === true || String(value).toLowerCase() === "true";
-    }
-
     function refreshReports() {
       loadHaloTickets();
     }
@@ -2508,7 +2478,7 @@ const technicians = [
         payload,
         timestamp: new Date().toISOString()
       };
-      console.log("HaloPSA action", request);
+      debugLog("HaloPSA action", request);
       if (!state.apiProxyUrl) return request;
 
       try {
@@ -2546,6 +2516,10 @@ const technicians = [
         return "Unable to reach the Worker URL. Confirm the saved Worker API URL is the workers.dev URL, not the GitHub Pages URL, and that the Worker is deployed.";
       }
       return error.message;
+    }
+
+    function debugLog(message, data) {
+      if (debugEnabled) console.log(message, data);
     }
 
     function renderAll() {
