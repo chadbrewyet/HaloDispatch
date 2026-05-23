@@ -421,7 +421,7 @@ async function handleDispatchUserPreferenceSave(payload, env) {
 
   const tableId = customTableId(env, "HALO_USER_PREF_TABLE_ID", DEFAULT_USER_PREF_TABLE_ID);
   const table = await loadCustomTable(env, tableId);
-  const fields = storageFields(env);
+  const fields = storageFields(env, table.schema);
   const existing = table.rows.find(row => String(readRowValue(row, fields.prefAgent)) === agentId);
   const row = {
     [fields.prefAgent[0]]: agentId,
@@ -429,7 +429,18 @@ async function handleDispatchUserPreferenceSave(payload, env) {
     [fields.updatedAt[0]]: new Date().toISOString()
   };
 
-  return saveCustomTableRow(env, tableId, row, existing);
+  const result = await saveCustomTableRow(env, tableId, row, existing);
+  const verifiedTable = await loadCustomTable(env, tableId);
+  const verifiedFields = storageFields(env, verifiedTable.schema);
+  const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.prefAgent)) === agentId);
+  if (!saved) {
+    return {
+      ok: false,
+      error: "Halo accepted the custom table save, but the preference row was not found afterward. Confirm the User Preferences table column names.",
+      meta: result.meta
+    };
+  }
+  return result;
 }
 
 async function handleDispatchSavedFilterSave(payload, env) {
@@ -438,7 +449,7 @@ async function handleDispatchSavedFilterSave(payload, env) {
 
   const tableId = customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID);
   const table = await loadCustomTable(env, tableId);
-  const fields = storageFields(env);
+  const fields = storageFields(env, table.schema);
   const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
   const filter = payload.filter || {};
   const row = {
@@ -451,7 +462,18 @@ async function handleDispatchSavedFilterSave(payload, env) {
     [fields.updatedAt[0]]: new Date().toISOString()
   };
 
-  return saveCustomTableRow(env, tableId, row, existing);
+  const result = await saveCustomTableRow(env, tableId, row, existing);
+  const verifiedTable = await loadCustomTable(env, tableId);
+  const verifiedFields = storageFields(env, verifiedTable.schema);
+  const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.filterName)).toLowerCase() === name.toLowerCase());
+  if (!saved) {
+    return {
+      ok: false,
+      error: "Halo accepted the custom table save, but the saved filter row was not found afterward. Confirm the Saved Filters table column names.",
+      meta: result.meta
+    };
+  }
+  return result;
 }
 
 async function handleDispatchSavedFilterDelete(payload, env) {
@@ -460,7 +482,7 @@ async function handleDispatchSavedFilterDelete(payload, env) {
 
   const tableId = customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID);
   const table = await loadCustomTable(env, tableId);
-  const fields = storageFields(env);
+  const fields = storageFields(env, table.schema);
   const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
   if (!existing) return { ok: true, mode: "not-found", message: "Saved filter was not present in Halo storage." };
 
@@ -470,7 +492,19 @@ async function handleDispatchSavedFilterDelete(payload, env) {
     [fields.updatedAt[0]]: new Date().toISOString()
   };
 
-  return saveCustomTableRow(env, tableId, row, existing);
+  const result = await saveCustomTableRow(env, tableId, row, existing);
+  const verifiedTable = await loadCustomTable(env, tableId);
+  const verifiedFields = storageFields(env, verifiedTable.schema);
+  const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.filterName)).toLowerCase() === name.toLowerCase());
+  const deleted = saved ? readRowValue(saved, verifiedFields.filterDeleted) : "";
+  if (saved && deleted !== true && String(deleted).toLowerCase() !== "true") {
+    return {
+      ok: false,
+      error: "Halo accepted the custom table save, but the filter was not marked deleted afterward. Confirm the Saved Filters table column names.",
+      meta: result.meta
+    };
+  }
+  return result;
 }
 
 function normalizeDateOnlyTicket(ticket, dateFieldId) {
@@ -937,9 +971,11 @@ async function loadCustomTable(env, tableId) {
 }
 
 async function saveCustomTableRow(env, tableId, row, existingRow) {
+  const rowPayload = existingRow?.id ? { id: existingRow.id, ...row } : row;
   const body = [{
     id: Number(tableId),
-    ...(existingRow?.id ? { rows: [{ id: existingRow.id, ...row }] } : { _add_rows: [row] })
+    customextratableid: Number(tableId),
+    rows: [rowPayload]
   }];
   const response = await haloRequestWithFallback(env, ["/api/CustomTable", "/api/CustomTables"], {
     method: "POST",
@@ -998,23 +1034,26 @@ function normalizeSavedFilterRows(rows, env) {
   }, {});
 }
 
-function storageFields(env) {
+function storageFields(env, schema = []) {
   return {
-    prefAgent: fieldAliases(env.HALO_PREF_AGENT_FIELD, ["agent_id", "agentId", "Agent ID", "Agent"]),
-    prefJson: fieldAliases(env.HALO_PREF_JSON_FIELD, ["preferences_json", "settings_json", "preferences", "settings", "json"]),
-    filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, ["filter_name", "name", "Filter Name"]),
-    filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, ["list_title", "title", "List Title"]),
-    filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, ["color", "theme_color", "Color"]),
-    filterJson: fieldAliases(env.HALO_FILTER_JSON_FIELD, ["filter_json", "filter", "json"]),
-    filterDeleted: fieldAliases(env.HALO_FILTER_DELETED_FIELD, ["deleted", "is_deleted", "Deleted"]),
-    filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, ["updated_by_agent_id", "agent_id", "Updated By Agent"]),
-    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["updated_at", "Updated At"])
+    prefAgent: fieldAliases(env.HALO_PREF_AGENT_FIELD, ["agent_id", "agentId", "Agent ID", "Agent"], schema),
+    prefJson: fieldAliases(env.HALO_PREF_JSON_FIELD, ["preferences_json", "settings_json", "preferences", "settings", "json"], schema),
+    filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, ["filter_name", "name", "Filter Name"], schema),
+    filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, ["list_title", "title", "List Title"], schema),
+    filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, ["color", "theme_color", "Color"], schema),
+    filterJson: fieldAliases(env.HALO_FILTER_JSON_FIELD, ["filter_json", "filter", "json"], schema),
+    filterDeleted: fieldAliases(env.HALO_FILTER_DELETED_FIELD, ["deleted", "is_deleted", "Deleted"], schema),
+    filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, ["updated_by_agent_id", "agent_id", "Updated By Agent"], schema),
+    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["updated_at", "Updated At"], schema)
   };
 }
 
-function fieldAliases(configured, defaults) {
+function fieldAliases(configured, defaults, schema = []) {
   const values = parseListEnv(configured);
-  return values.length ? values : defaults;
+  const aliases = values.length ? values : defaults;
+  const schemaNames = schema.map(field => field.name).filter(Boolean);
+  const schemaMatch = schemaNames.find(name => aliases.some(alias => String(alias).toLowerCase() === String(name).toLowerCase()));
+  return schemaMatch ? [schemaMatch, ...aliases] : aliases;
 }
 
 function readRowValue(row, names) {

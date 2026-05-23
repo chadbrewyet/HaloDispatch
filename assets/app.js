@@ -2272,11 +2272,16 @@ const technicians = [
     }
 
     async function saveHaloUserPreferences(options = {}) {
-      if (!state.apiProxyUrl || !currentStorageAgentId()) return;
+      if (!state.apiProxyUrl) return;
+      if (!currentStorageAgentId()) {
+        if (!options.quiet) toast("Preferences not synced", "Pass agent_id in the iframe URL or select an agent before saving user preferences.");
+        return;
+      }
       const result = await callHalo("saveDispatchUserPreferences", {
         agentId: currentStorageAgentId(),
         preferences: dispatchPreferencePayload()
       }, { quiet: true });
+      if (result?.ok === false) toast("Preference sync failed", result.error || "The preferences remain saved locally.");
       if (result?.ok && !options.quiet) toast("Preferences saved", "Your dispatch board preferences were saved to Halo.");
     }
 
