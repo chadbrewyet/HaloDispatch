@@ -103,6 +103,7 @@ Current Halo configuration:
 - ticket type filters are loaded from `GET /api/TicketType`
 - without-time task date field: `CFTaskWithoutTimeDate` / `486`
 - ticket URL prefix: `https://gagepsa.halopsa.com/ticket?id=`
+- ticket list filters support categorical include/exclude conditions plus date and number operators such as before, after, on, greater than, less than, and between.
 
 Technician and team display names are loaded from `GET /api/Agent`. A technician is included when the agent has a `teams` array entry where `in_section` is `true`; the Settings drawer filters agents by selected team memberships.
 

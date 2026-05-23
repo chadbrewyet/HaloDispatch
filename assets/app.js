@@ -81,15 +81,18 @@ const technicians = [
     ];
 
     const listFilterFieldOptions = [
-      { key: "assignedTo", label: "Tech Assigned" },
-      { key: "team", label: "Team" },
-      { key: "status", label: "Status" },
-      { key: "type", label: "Ticket Type" },
-      { key: "serviceZone", label: "Service Zone" },
-      { key: "priority", label: "Priority" },
-      { key: "client", label: "Client" },
-      { key: "site", label: "Site" },
-      { key: "contact", label: "Contact" }
+      { key: "assignedTo", label: "Tech Assigned", type: "category" },
+      { key: "team", label: "Team", type: "category" },
+      { key: "status", label: "Status", type: "category" },
+      { key: "type", label: "Ticket Type", type: "category" },
+      { key: "serviceZone", label: "Service Zone", type: "category" },
+      { key: "priority", label: "Priority", type: "category" },
+      { key: "client", label: "Client", type: "category" },
+      { key: "site", label: "Site", type: "category" },
+      { key: "contact", label: "Contact", type: "category" },
+      { key: "dateOpened", label: "Date Opened", type: "date" },
+      { key: "dateField", label: "No-Time Task Date", type: "date" },
+      { key: "estimate", label: "Estimate", type: "number" }
     ];
 
     const $ = (id) => document.getElementById(id);
@@ -896,11 +899,10 @@ const technicians = [
       const filter = ensureListFilter(key);
       return tickets.filter(ticket => {
         if (ticket.report !== report.id || !shouldShowTicketCard(ticket)) return false;
-        const activeConditions = filterConditions(filter).filter(condition => condition.values?.length);
+        const activeConditions = filterConditions(filter).filter(conditionActive);
         if (!activeConditions.length) return true;
         return activeConditions.reduce((matches, condition, index) => {
-          const hasValue = ticketFilterValues(ticket, condition.field).some(value => condition.values.includes(String(value)));
-          const conditionMatches = condition.mode === "exclude" ? !hasValue : hasValue;
+          const conditionMatches = ticketMatchesCondition(ticket, condition);
           if (index === 0) return conditionMatches;
           return condition.joiner === "or" ? matches || conditionMatches : matches && conditionMatches;
         }, true);
@@ -927,12 +929,90 @@ const technicians = [
         field,
         joiner: "and",
         mode: filter.modes?.[field] || "include",
+        operator: defaultOperatorForField(field),
         values: values || []
       }));
     }
 
     function defaultCondition() {
-      return { joiner: "and", mode: "include", field: state.selectedListFilterFields[0] || "assignedTo", values: [] };
+      const field = state.selectedListFilterFields[0] || "assignedTo";
+      return { joiner: "and", mode: "include", field, operator: defaultOperatorForField(field), values: [], value: "", valueEnd: "" };
+    }
+
+    function filterFieldConfig(field) {
+      return listFilterFieldOptions.find(item => item.key === field) || { key: field, label: field, type: "category" };
+    }
+
+    function filterFieldType(field) {
+      return filterFieldConfig(field).type || "category";
+    }
+
+    function defaultOperatorForField(field) {
+      const type = filterFieldType(field);
+      if (type === "date") return "on";
+      if (type === "number") return "eq";
+      return "any";
+    }
+
+    function conditionActive(condition) {
+      const type = filterFieldType(condition.field);
+      if (type === "category") return Array.isArray(condition.values) && condition.values.length > 0;
+      if (["empty", "notEmpty"].includes(condition.operator)) return true;
+      if (condition.operator === "between") return Boolean(condition.value && condition.valueEnd);
+      return condition.value !== undefined && condition.value !== null && String(condition.value).trim() !== "";
+    }
+
+    function ticketMatchesCondition(ticket, condition) {
+      const type = filterFieldType(condition.field);
+      let matches = false;
+      if (type === "date") {
+        matches = dateConditionMatches(ticketFilterValue(ticket, condition.field), condition);
+      } else if (type === "number") {
+        matches = numberConditionMatches(ticketFilterValue(ticket, condition.field), condition);
+      } else {
+        const selected = (condition.values || []).map(String);
+        const hasValue = ticketFilterValues(ticket, condition.field).some(value => selected.includes(String(value)));
+        matches = condition.operator === "none" ? !hasValue : hasValue;
+      }
+      return condition.mode === "exclude" ? !matches : matches;
+    }
+
+    function dateConditionMatches(rawValue, condition) {
+      const dateValue = normalizeDateValue(rawValue);
+      const compareValue = normalizeDateValue(condition.value);
+      const compareEnd = normalizeDateValue(condition.valueEnd);
+      if (condition.operator === "empty") return !dateValue;
+      if (condition.operator === "notEmpty") return Boolean(dateValue);
+      if (!dateValue || !compareValue) return false;
+      if (condition.operator === "before") return dateValue < compareValue;
+      if (condition.operator === "after") return dateValue > compareValue;
+      if (condition.operator === "onOrBefore") return dateValue <= compareValue;
+      if (condition.operator === "onOrAfter") return dateValue >= compareValue;
+      if (condition.operator === "between") return Boolean(compareEnd) && dateValue >= compareValue && dateValue <= compareEnd;
+      return dateValue === compareValue;
+    }
+
+    function numberConditionMatches(rawValue, condition) {
+      const numberValue = Number(rawValue);
+      const compareValue = Number(condition.value);
+      const compareEnd = Number(condition.valueEnd);
+      if (condition.operator === "empty") return rawValue === "" || rawValue === undefined || rawValue === null;
+      if (condition.operator === "notEmpty") return !(rawValue === "" || rawValue === undefined || rawValue === null);
+      if (!Number.isFinite(numberValue) || !Number.isFinite(compareValue)) return false;
+      if (condition.operator === "lt") return numberValue < compareValue;
+      if (condition.operator === "gt") return numberValue > compareValue;
+      if (condition.operator === "lte") return numberValue <= compareValue;
+      if (condition.operator === "gte") return numberValue >= compareValue;
+      if (condition.operator === "between") return Number.isFinite(compareEnd) && numberValue >= compareValue && numberValue <= compareEnd;
+      return numberValue === compareValue;
+    }
+
+    function normalizeDateValue(value) {
+      if (!value) return "";
+      const text = String(value).trim();
+      if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
+      const date = new Date(text);
+      return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "";
     }
 
     function listThemeStyle(color = "#1976a3") {
@@ -1017,8 +1097,7 @@ const technicians = [
     }
 
     function renderFilterConditionRow(condition, index) {
-      const values = uniqueTicketValues(condition.field);
-      const selected = condition.values || [];
+      const fieldType = filterFieldType(condition.field);
       const fieldOptions = listFilterFieldOptions.map(field => `<option value="${field.key}" ${field.key === condition.field ? "selected" : ""}>${escapeHtml(field.label)}</option>`).join("");
       return `
         <div class="filter-condition-row" data-condition-index="${index}">
@@ -1030,24 +1109,84 @@ const technicians = [
           ` : `<div class="condition-joiner-spacer"></div>`}
           <button class="filter-mode-toggle ${condition.mode === "exclude" ? "exclude" : ""}" data-condition-mode="${index}" type="button">${condition.mode === "exclude" ? "Exclude" : "Include"}</button>
           <select data-condition-field="${index}">${fieldOptions}</select>
-          <details class="multi-dropdown condition-value-picker" data-condition-details="${index}" ${state.openFilterFields[`modal:${index}`] ? "open" : ""}>
-            <summary>${selected.length ? `${selected.length} selected` : "Select values"}</summary>
-            <div class="agent-picker">
-              <div class="filter-bulk-row">
-                <button type="button" data-condition-bulk="${index}" data-bulk-action="select">Select All</button>
-                <button type="button" data-condition-bulk="${index}" data-bulk-action="clear">Clear All</button>
-              </div>
-              ${values.map(value => `
-                <label class="agent-option">
-                  <input type="checkbox" data-condition-value="${index}" value="${escapeHtml(value)}" ${selected.includes(value) ? "checked" : ""}>
-                  <span>${escapeHtml(filterValueLabel(condition.field, value))}</span>
-                </label>
-              `).join("") || `<div class="empty">No values yet.</div>`}
-            </div>
-          </details>
+          ${renderConditionOperator(condition, index, fieldType)}
+          ${renderConditionValueControl(condition, index, fieldType)}
           <button class="icon" data-add-condition="${index}" type="button" title="Add condition">+</button>
           ${index > 0 ? `<button class="icon danger-icon" data-delete-condition="${index}" type="button" title="Remove condition">x</button>` : ""}
         </div>
+      `;
+    }
+
+    function renderConditionOperator(condition, index, fieldType) {
+      const options = conditionOperatorOptions(fieldType);
+      const value = condition.operator || defaultOperatorForField(condition.field);
+      return `
+        <select data-condition-operator="${index}" title="Filter operator">
+          ${options.map(option => `<option value="${option.value}" ${option.value === value ? "selected" : ""}>${option.label}</option>`).join("")}
+        </select>
+      `;
+    }
+
+    function conditionOperatorOptions(fieldType) {
+      if (fieldType === "date") {
+        return [
+          { value: "on", label: "On" },
+          { value: "before", label: "Before" },
+          { value: "after", label: "After" },
+          { value: "onOrBefore", label: "On/before" },
+          { value: "onOrAfter", label: "On/after" },
+          { value: "between", label: "Between" },
+          { value: "empty", label: "Blank" },
+          { value: "notEmpty", label: "Not blank" }
+        ];
+      }
+      if (fieldType === "number") {
+        return [
+          { value: "eq", label: "=" },
+          { value: "lt", label: "<" },
+          { value: "gt", label: ">" },
+          { value: "lte", label: "<=" },
+          { value: "gte", label: ">=" },
+          { value: "between", label: "Between" },
+          { value: "empty", label: "Blank" },
+          { value: "notEmpty", label: "Not blank" }
+        ];
+      }
+      return [
+        { value: "any", label: "Matches" },
+        { value: "none", label: "Doesn't match" }
+      ];
+    }
+
+    function renderConditionValueControl(condition, index, fieldType) {
+      if (fieldType === "date" || fieldType === "number") {
+        const inputType = fieldType === "date" ? "date" : "number";
+        const disabled = ["empty", "notEmpty"].includes(condition.operator) ? "disabled" : "";
+        return `
+          <div class="condition-range-inputs">
+            <input type="${inputType}" data-condition-scalar="${index}" value="${escapeHtml(condition.value || "")}" ${disabled}>
+            ${condition.operator === "between" ? `<input type="${inputType}" data-condition-scalar-end="${index}" value="${escapeHtml(condition.valueEnd || "")}">` : ""}
+          </div>
+        `;
+      }
+      const values = uniqueTicketValues(condition.field);
+      const selected = condition.values || [];
+      return `
+        <details class="multi-dropdown condition-value-picker" data-condition-details="${index}" ${state.openFilterFields[`modal:${index}`] ? "open" : ""}>
+          <summary>${selected.length ? `${selected.length} selected` : "Select values"}</summary>
+          <div class="agent-picker">
+            <div class="filter-bulk-row">
+              <button type="button" data-condition-bulk="${index}" data-bulk-action="select">Select All</button>
+              <button type="button" data-condition-bulk="${index}" data-bulk-action="clear">Clear All</button>
+            </div>
+            ${values.map(value => `
+              <label class="agent-option">
+                <input type="checkbox" data-condition-value="${index}" value="${escapeHtml(value)}" ${selected.includes(value) ? "checked" : ""}>
+                <span>${escapeHtml(filterValueLabel(condition.field, value))}</span>
+              </label>
+            `).join("") || `<div class="empty">No values yet.</div>`}
+          </div>
+        </details>
       `;
     }
 
@@ -1069,8 +1208,32 @@ const technicians = [
         select.addEventListener("change", () => {
           const condition = state.draftFilter.conditions[Number(select.dataset.conditionField)];
           condition.field = select.value;
+          condition.operator = defaultOperatorForField(condition.field);
           condition.values = [];
+          condition.value = "";
+          condition.valueEnd = "";
           renderFilterModal();
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-condition-operator]").forEach(select => {
+        select.addEventListener("change", () => {
+          const condition = state.draftFilter.conditions[Number(select.dataset.conditionOperator)];
+          condition.operator = select.value;
+          if (["empty", "notEmpty"].includes(condition.operator)) {
+            condition.value = "";
+            condition.valueEnd = "";
+          }
+          renderFilterModal();
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-condition-scalar]").forEach(input => {
+        input.addEventListener("input", () => {
+          state.draftFilter.conditions[Number(input.dataset.conditionScalar)].value = input.value;
+        });
+      });
+      $("filterConditionList").querySelectorAll("[data-condition-scalar-end]").forEach(input => {
+        input.addEventListener("input", () => {
+          state.draftFilter.conditions[Number(input.dataset.conditionScalarEnd)].valueEnd = input.value;
         });
       });
       $("filterConditionList").querySelectorAll("[data-condition-value]").forEach(input => {
@@ -1198,6 +1361,10 @@ const technicians = [
         if (!condition.field) return;
         condition.joiner = condition.joiner || "and";
         condition.mode = condition.mode || "include";
+        condition.operator = condition.operator || defaultOperatorForField(condition.field);
+        condition.values = condition.values || [];
+        condition.value = condition.value || "";
+        condition.valueEnd = condition.valueEnd || "";
         normalized.values[condition.field] = condition.values || [];
         normalized.modes[condition.field] = condition.mode;
       });
@@ -2398,6 +2565,7 @@ const technicians = [
         contact: ticket.contact || "",
         details: ticket.details || "",
         dateField: ticket.dateField || "",
+        dateOpened: ticket.dateOpened || "",
         assignedTo: ticket.assignedTo || "",
         haloTicketId: ticket.haloTicketId || id,
         completed: Boolean(ticket.completed),
