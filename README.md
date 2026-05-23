@@ -134,13 +134,15 @@ Current table ID: `1013`. One row per Halo agent.
 
 Current table ID: `1014`. Shared ticket-list definitions available to all dispatch users.
 
-- `filter_name` text, unique
-- `list_title` text
-- `color` text
-- `filter_json` long text
-- `deleted` boolean
-- `updated_by_agent_id` integer
-- `updated_at` date/time
+- `CFDispatchFilterName` text, unique
+- `CFDispatchFilterTitle` text
+- `CFDispatchFilterColor` text
+- `CFDispatchFilterConditions` long text containing a JSON array
+- `CFDispatchFilterCreatedBy` text/integer
+- `CFDispatchFilterUpdatedBy` text/integer
+- `CFDispatchFilterActive` checkbox
+- `CFDispatchFilterCreatedAt` text/date
+- `CFDispatchFilerUpdatedAt` text/date
 
 The Worker defaults to those column names. If your Halo table uses different names, set these Worker variables:
 
@@ -158,34 +160,31 @@ The Worker defaults to those column names. If your Halo table uses different nam
 - `HALO_FILTER_NAME_FIELD`
 - `HALO_FILTER_TITLE_FIELD`
 - `HALO_FILTER_COLOR_FIELD`
-- `HALO_FILTER_JSON_FIELD`
-- `HALO_FILTER_DELETED_FIELD`
+- `HALO_FILTER_CONDITIONS_FIELD`
+- `HALO_FILTER_CREATED_BY_FIELD`
 - `HALO_FILTER_UPDATED_BY_FIELD`
+- `HALO_FILTER_ACTIVE_FIELD`
+- `HALO_FILTER_CREATED_AT_FIELD`
 - `HALO_STORAGE_CREATED_AT_FIELD`
 - `HALO_STORAGE_UPDATED_AT_FIELD`
 
-Example `filter_json`:
+Example `CFDispatchFilterConditions`:
 
 ```json
-{
-  "name": "Dispatch Triage",
-  "title": "Dispatch Triage",
-  "color": "#1976a3",
-  "conditions": [
-    {
-      "joiner": "and",
-      "mode": "include",
-      "field": "team",
-      "values": ["3", "11"]
-    },
-    {
-      "joiner": "and",
-      "mode": "exclude",
-      "field": "status",
-      "values": ["Closed", "Completed"]
-    }
-  ]
-}
+[
+  {
+    "joiner": "and",
+    "mode": "include",
+    "field": "team",
+    "values": ["3", "11"]
+  },
+  {
+    "joiner": "and",
+    "mode": "exclude",
+    "field": "status",
+    "values": ["Closed", "Completed"]
+  }
+]
 ```
 
 ## Production Hardening Notes

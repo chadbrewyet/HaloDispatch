@@ -464,14 +464,21 @@ async function handleDispatchSavedFilterSave(payload, env) {
   const fields = storageFields(env, table.fields);
   const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
   const filter = payload.filter || {};
+  const now = new Date().toISOString();
   const row = {
     [fields.filterName[0]]: name,
     [fields.filterTitle[0]]: filter.title || name,
     [fields.filterColor[0]]: filter.color || "",
-    [fields.filterJson[0]]: JSON.stringify(filter),
-    [fields.filterDeleted[0]]: false,
+    [fields.filterConditions[0]]: JSON.stringify(filter.conditions || []),
+    [fields.filterActive[0]]: true,
     [fields.filterUpdatedBy[0]]: String(payload.agentId || ""),
-    [fields.updatedAt[0]]: new Date().toISOString()
+    [fields.updatedAt[0]]: now,
+    ...(!existing ? {
+      [fields.filterCreatedBy[0]]: String(payload.agentId || ""),
+      [fields.filterCreatedAt[0]]: now
+    } : {}),
+    [fields.filterJson[0]]: JSON.stringify(filter),
+    [fields.filterDeleted[0]]: false
   };
 
   const result = await saveCustomTableRow(env, tableId, row, existing, table.fields);
@@ -500,6 +507,7 @@ async function handleDispatchSavedFilterDelete(payload, env) {
 
   const row = {
     [fields.filterName[0]]: name,
+    [fields.filterActive[0]]: false,
     [fields.filterDeleted[0]]: true,
     [fields.updatedAt[0]]: new Date().toISOString()
   };
@@ -508,8 +516,9 @@ async function handleDispatchSavedFilterDelete(payload, env) {
   const verifiedTable = await loadCustomTable(env, tableId);
   const verifiedFields = storageFields(env, verifiedTable.fields);
   const saved = verifiedTable.rows.find(entry => String(readRowValue(entry, verifiedFields.filterName)).toLowerCase() === name.toLowerCase());
+  const active = saved ? readRowValue(saved, verifiedFields.filterActive) : "";
   const deleted = saved ? readRowValue(saved, verifiedFields.filterDeleted) : "";
-  if (saved && deleted !== true && String(deleted).toLowerCase() !== "true") {
+  if (saved && active !== false && String(active).toLowerCase() !== "false" && deleted !== true && String(deleted).toLowerCase() !== "true") {
     return {
       ok: false,
       error: "Halo accepted the custom table save, but the filter was not marked deleted afterward. Confirm the Saved Filters table column names.",
@@ -1058,18 +1067,22 @@ function normalizeUserPreferenceRows(rows, agentId, env) {
 function normalizeSavedFilterRows(rows, env) {
   const fields = storageFields(env);
   return rows.reduce((filters, row) => {
+    const active = readRowValue(row, fields.filterActive);
+    if (active === false || String(active).toLowerCase() === "false") return filters;
     const deleted = readRowValue(row, fields.filterDeleted);
     if (deleted === true || String(deleted).toLowerCase() === "true") return filters;
 
     const name = String(readRowValue(row, fields.filterName) || "").trim();
     if (!name) return filters;
 
-    const filter = parseStorageJson(readRowValue(row, fields.filterJson), {});
+    const fallbackFilter = parseStorageJson(readRowValue(row, fields.filterJson), {});
+    const conditions = parseStorageJson(readRowValue(row, fields.filterConditions), fallbackFilter.conditions || []);
     filters[name] = {
-      ...filter,
-      name: filter.name || name,
-      title: filter.title || readRowValue(row, fields.filterTitle) || name,
-      color: filter.color || readRowValue(row, fields.filterColor) || "#1976a3"
+      ...fallbackFilter,
+      name: fallbackFilter.name || name,
+      title: fallbackFilter.title || readRowValue(row, fields.filterTitle) || name,
+      color: fallbackFilter.color || readRowValue(row, fields.filterColor) || "#1976a3",
+      conditions
     };
     return filters;
   }, {});
@@ -1088,14 +1101,18 @@ function storageFields(env, schema = []) {
     prefCalendarEnd: fieldAliases(env.HALO_PREF_CALENDAR_END_FIELD, ["CFDispatchCalendarEndTime", "calendar_end_time", "Calendar End Time"], schema),
     prefTechThemes: fieldAliases(env.HALO_PREF_TECH_THEMES_FIELD, ["CFDispatchTechThemes", "tech_themes_json", "Tech Themes"], schema),
     prefVisibleTickets: fieldAliases(env.HALO_PREF_VISIBLE_TICKETS_FIELD, ["CFDispatchVisibleTickets", "visible_ticket_fields_json", "Visible Tickets"], schema),
-    filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, ["filter_name", "name", "Filter Name"], schema),
-    filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, ["list_title", "title", "List Title"], schema),
-    filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, ["color", "theme_color", "Color"], schema),
+    filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, ["CFDispatchFilterName", "filter_name", "name", "Filter Name"], schema),
+    filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, ["CFDispatchFilterTitle", "list_title", "title", "Filter Title"], schema),
+    filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, ["CFDispatchFilterColor", "color", "theme_color", "Filter Color"], schema),
+    filterConditions: fieldAliases(env.HALO_FILTER_CONDITIONS_FIELD, ["CFDispatchFilterConditions", "conditions_json", "filter_conditions", "Filter Conditions"], schema),
     filterJson: fieldAliases(env.HALO_FILTER_JSON_FIELD, ["filter_json", "filter", "json"], schema),
     filterDeleted: fieldAliases(env.HALO_FILTER_DELETED_FIELD, ["deleted", "is_deleted", "Deleted"], schema),
-    filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, ["updated_by_agent_id", "agent_id", "Updated By Agent"], schema),
+    filterCreatedBy: fieldAliases(env.HALO_FILTER_CREATED_BY_FIELD, ["CFDispatchFilterCreatedBy", "created_by_agent_id", "Created By"], schema),
+    filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, ["CFDispatchFilterUpdatedBy", "updated_by_agent_id", "Updated By"], schema),
+    filterActive: fieldAliases(env.HALO_FILTER_ACTIVE_FIELD, ["CFDispatchFilterActive", "is_active", "active", "Is Active"], schema),
+    filterCreatedAt: fieldAliases(env.HALO_FILTER_CREATED_AT_FIELD, ["CFDispatchFilterCreatedAt", "created_at", "Created At"], schema),
     createdAt: fieldAliases(env.HALO_STORAGE_CREATED_AT_FIELD, ["CFDispatchCreatedAt", "created_at", "Created At"], schema),
-    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["CFDispatchUpdatedAt", "updated_at", "Updated At"], schema)
+    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["CFDispatchUpdatedAt", "CFDispatchFilerUpdatedAt", "updated_at", "Updated At"], schema)
   };
 }
 
