@@ -994,13 +994,24 @@ async function loadCustomTable(env, tableId) {
 
 async function saveCustomTableRow(env, tableId, row, existingRow, fields = []) {
   const customfields = rowToCustomFields(row, fields);
+  const tableField = customTableEntryField(fields, customfields);
   const body = [{
     id: Number(tableId),
-    customextratableid: Number(tableId),
-    ...(existingRow?.id ? { key: existingRow.id } : {}),
     _isimport: true,
-    _importtype: "customtable",
-    customfields: customfields.length ? customfields : rowToFallbackCustomFields(row)
+    _importtype: "runbook",
+    customfields: [
+      {
+        id: tableField.id,
+        name: tableField.name,
+        type: 7,
+        usage: Number(tableId),
+        value: [
+          {
+            customfields: customfields.length ? customfields : rowToFallbackCustomFields(row)
+          }
+        ]
+      }
+    ]
   }];
   const response = await haloRequestWithFallback(env, ["/api/CustomTable", "/api/CustomTables"], {
     method: "POST",
@@ -1014,6 +1025,15 @@ async function saveCustomTableRow(env, tableId, row, existingRow, fields = []) {
       mode: existingRow?.id ? "update" : "insert"
     }
   };
+}
+
+function customTableEntryField(fields = [], customfields = []) {
+  const primary = fields.find(field => customfields.some(entry => Number(entry.id) === Number(field.id)));
+  const fallback = fields.find(field => field.id) || customfields.find(field => field.id);
+  if (!primary && !fallback) {
+    throw new Error("Unable to identify the custom table entry field for this Halo custom table.");
+  }
+  return primary || fallback;
 }
 
 function rowToCustomFields(row, fields = []) {
