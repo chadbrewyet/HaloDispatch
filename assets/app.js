@@ -1652,6 +1652,9 @@ const technicians = [
       if (!name || !state.savedFilters[name]) return;
       state.listFilters[key] = {
         name,
+        title: state.savedFilters[name].title || name,
+        color: state.savedFilters[name].color || "#1976a3",
+        includeAssigned: Boolean(state.savedFilters[name].includeAssigned),
         values: structuredClone(state.savedFilters[name].values || {}),
         modes: structuredClone(state.savedFilters[name].modes || {}),
         conditions: structuredClone(filterConditions(state.savedFilters[name]))
@@ -2559,12 +2562,7 @@ const technicians = [
       state.loadingHaloStorage = true;
       try {
         const savedFilters = result.data?.savedFilters || {};
-        if (Object.keys(savedFilters).length) {
-          state.savedFilters = {
-            ...state.savedFilters,
-            ...savedFilters
-          };
-        }
+        state.savedFilters = savedFilters;
         const preferences = result.data?.userPreferences?.preferences;
         if (preferences && Object.keys(preferences).length) {
           applyDispatchPreferencePayload(preferences);

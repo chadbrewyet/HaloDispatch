@@ -511,7 +511,7 @@ async function handleDispatchUserPreferenceSave(payload, env) {
     [fields.prefCalendarStart[0]]: preferences.calendarStartTime || "",
     [fields.prefCalendarEnd[0]]: preferences.calendarEndTime || "",
     [fields.prefTechThemes[0]]: JSON.stringify(preferences.techThemes || {}),
-    [fields.prefVisibleTickets[0]]: JSON.stringify(preferences.visibleFields || []),
+    [fields.prefVisibleTickets[0]]: JSON.stringify(preferences),
     [fields.updatedAt[0]]: now,
     ...(!existing ? { [fields.createdAt[0]]: now } : {})
   };
@@ -529,11 +529,18 @@ async function handleDispatchSavedFilterSave(payload, env) {
   const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
   const filter = payload.filter || {};
   const now = new Date().toISOString();
+  const filterPayload = {
+    ...filter,
+    includeAssigned: Boolean(filter.includeAssigned)
+  };
   const row = {
     [fields.filterName[0]]: name,
-    [fields.filterTitle[0]]: filter.title || name,
-    [fields.filterColor[0]]: filter.color || "",
-    [fields.filterConditions[0]]: JSON.stringify(filter.conditions || []),
+    [fields.filterTitle[0]]: filterPayload.title || name,
+    [fields.filterColor[0]]: filterPayload.color || "",
+    [fields.filterConditions[0]]: JSON.stringify({
+      includeAssigned: Boolean(filterPayload.includeAssigned),
+      conditions: filterPayload.conditions || []
+    }),
     [fields.filterActive[0]]: true,
     [fields.filterUpdatedBy[0]]: String(payload.agentId || ""),
     [fields.updatedAt[0]]: now,
@@ -541,7 +548,7 @@ async function handleDispatchSavedFilterSave(payload, env) {
       [fields.filterCreatedBy[0]]: String(payload.agentId || ""),
       [fields.filterCreatedAt[0]]: now
     } : {}),
-    [fields.filterJson[0]]: JSON.stringify(filter),
+    [fields.filterJson[0]]: JSON.stringify(filterPayload),
     [fields.filterDeleted[0]]: false
   };
 
@@ -1219,6 +1226,20 @@ function normalizeUserPreferenceRows(rows, agentId, env) {
   const fields = storageFields(env);
   const row = rows.find(entry => String(readRowValue(entry, fields.prefAgent)) === String(agentId));
   if (!row) return null;
+  const payload = parseStorageJson(readRowValue(row, fields.prefVisibleTickets), null);
+  if (payload && !Array.isArray(payload) && typeof payload === "object") {
+    return {
+      rowId: row.id || null,
+      agentId,
+      preferences: compactObject({
+        ...payload,
+        theme: payload.theme ?? readRowValue(row, fields.prefTheme),
+        orientation: payload.orientation ?? readRowValue(row, fields.prefOrientation),
+        selectedTeams: payload.selectedTeams ?? parseStorageJson(readRowValue(row, fields.prefSelectedTeams), []),
+        selectedTechs: payload.selectedTechs ?? parseStorageJson(readRowValue(row, fields.prefSelectedAgents), [])
+      })
+    };
+  }
   return {
     rowId: row.id || null,
     agentId,
@@ -1232,7 +1253,7 @@ function normalizeUserPreferenceRows(rows, agentId, env) {
       calendarStartTime: readRowValue(row, fields.prefCalendarStart),
       calendarEndTime: readRowValue(row, fields.prefCalendarEnd),
       techThemes: parseStorageJson(readRowValue(row, fields.prefTechThemes), {}),
-      visibleFields: parseStorageJson(readRowValue(row, fields.prefVisibleTickets), [])
+      visibleFields: Array.isArray(payload) ? payload : []
     })
   };
 }
@@ -1249,12 +1270,14 @@ function normalizeSavedFilterRows(rows, env) {
     if (!name) return filters;
 
     const fallbackFilter = parseStorageJson(readRowValue(row, fields.filterJson), {});
-    const conditions = parseStorageJson(readRowValue(row, fields.filterConditions), fallbackFilter.conditions || []);
+    const conditionPayload = parseStorageJson(readRowValue(row, fields.filterConditions), fallbackFilter.conditions || []);
+    const conditions = Array.isArray(conditionPayload) ? conditionPayload : (conditionPayload.conditions || fallbackFilter.conditions || []);
     filters[name] = {
       ...fallbackFilter,
       name: fallbackFilter.name || name,
       title: fallbackFilter.title || readRowValue(row, fields.filterTitle) || name,
       color: fallbackFilter.color || readRowValue(row, fields.filterColor) || "#1976a3",
+      includeAssigned: fallbackFilter.includeAssigned ?? conditionPayload.includeAssigned ?? false,
       conditions
     };
     return filters;
