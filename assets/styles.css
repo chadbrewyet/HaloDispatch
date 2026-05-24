@@ -680,6 +680,23 @@
       gap: 6px;
     }
 
+    .condition-range-inputs.single {
+      grid-template-columns: minmax(0, 120px);
+    }
+
+    .condition-static-value {
+      min-height: 34px;
+      display: flex;
+      align-items: center;
+      padding: 0 9px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      color: var(--muted);
+      background: var(--panel);
+      font-size: 11px;
+      font-weight: 800;
+    }
+
     .condition-joiner-spacer {
       min-height: 34px;
     }

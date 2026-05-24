@@ -367,6 +367,7 @@ const technicians = [
         currentAgentId: state.currentAgentId
       };
       Object.assign(state, preferences, keepConnection);
+      ensureSelectedTechnicians();
       $("colorBySelect").value = state.colorBy;
       $("show24HoursCheck").checked = state.show24Hours;
       $("calendarStartTime").value = state.calendarStartTime;
@@ -402,6 +403,23 @@ const technicians = [
       $("apiState").textContent = state.mockMode ? "HaloPSA mock mode" : "HaloPSA Worker connected";
       $("apiProxyUrl").disabled = state.mockMode;
       $("testWorkerBtn").disabled = state.mockMode;
+    }
+
+    function ensureSelectedTechnicians() {
+      const technicianIds = new Set(technicians.map(tech => tech.id));
+      state.selectedTechs = state.selectedTechs.map(String).filter(id => technicianIds.has(id));
+      if (state.selectedTechs.length) return;
+
+      const viewerTech = technicians.find(tech => String(tech.id) === currentStorageAgentId());
+      if (viewerTech) {
+        const viewerTeamIds = (Array.isArray(viewerTech.teamIds) && viewerTech.teamIds.length ? viewerTech.teamIds : [viewerTech.teamId]).map(String).filter(Boolean);
+        if (!state.selectedTeams.length) state.selectedTeams = viewerTeamIds;
+        state.selectedTechs = [viewerTech.id];
+        return;
+      }
+
+      const filteredIds = filteredTechnicians().map(tech => tech.id);
+      if (state.selectedTeams.length && filteredIds.length) state.selectedTechs = filteredIds;
     }
 
     function scheduleHaloPreferenceSave() {
@@ -979,6 +997,10 @@ const technicians = [
       const type = filterFieldType(condition.field);
       if (type === "category") return Array.isArray(condition.values) && condition.values.length > 0;
       if (["empty", "notEmpty"].includes(condition.operator)) return true;
+      if (type === "date" && relativeDateOperators().includes(condition.operator)) {
+        if (condition.operator === "lastDays" || condition.operator === "nextDays") return Number(condition.value || 7) > 0;
+        return true;
+      }
       if (condition.operator === "between") return Boolean(condition.value && condition.valueEnd);
       return condition.value !== undefined && condition.value !== null && String(condition.value).trim() !== "";
     }
@@ -1000,17 +1022,67 @@ const technicians = [
 
     function dateConditionMatches(rawValue, condition) {
       const dateValue = normalizeDateValue(rawValue);
-      const compareValue = normalizeDateValue(condition.value);
-      const compareEnd = normalizeDateValue(condition.valueEnd);
       if (condition.operator === "empty") return !dateValue;
       if (condition.operator === "notEmpty") return Boolean(dateValue);
-      if (!dateValue || !compareValue) return false;
+      if (!dateValue) return false;
+      const relativeRange = relativeDateRange(condition);
+      if (relativeRange) return dateValue >= relativeRange.start && dateValue <= relativeRange.end;
+      const compareValue = normalizeDateValue(condition.value);
+      const compareEnd = normalizeDateValue(condition.valueEnd);
+      if (!compareValue) return false;
       if (condition.operator === "before") return dateValue < compareValue;
       if (condition.operator === "after") return dateValue > compareValue;
       if (condition.operator === "onOrBefore") return dateValue <= compareValue;
       if (condition.operator === "onOrAfter") return dateValue >= compareValue;
       if (condition.operator === "between") return Boolean(compareEnd) && dateValue >= compareValue && dateValue <= compareEnd;
       return dateValue === compareValue;
+    }
+
+    function relativeDateOperators() {
+      return ["today", "yesterday", "tomorrow", "thisWeek", "thisMonth", "lastDays", "nextDays"];
+    }
+
+    function relativeDateRange(condition) {
+      if (!relativeDateOperators().includes(condition.operator)) return null;
+      const today = startOfLocalDay(new Date());
+      if (condition.operator === "today") return singleDateRange(today);
+      if (condition.operator === "yesterday") return singleDateRange(addDays(today, -1));
+      if (condition.operator === "tomorrow") return singleDateRange(addDays(today, 1));
+      if (condition.operator === "thisWeek") {
+        const start = addDays(today, -today.getDay());
+        return { start: localDateKey(start), end: localDateKey(addDays(start, 6)) };
+      }
+      if (condition.operator === "thisMonth") {
+        const start = new Date(today.getFullYear(), today.getMonth(), 1);
+        const end = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+        return { start: localDateKey(start), end: localDateKey(end) };
+      }
+      const dayCount = Math.max(1, Math.min(365, Number(condition.value || 7)));
+      if (condition.operator === "lastDays") return { start: localDateKey(addDays(today, -(dayCount - 1))), end: localDateKey(today) };
+      if (condition.operator === "nextDays") return { start: localDateKey(today), end: localDateKey(addDays(today, dayCount - 1)) };
+      return null;
+    }
+
+    function singleDateRange(date) {
+      const key = localDateKey(date);
+      return { start: key, end: key };
+    }
+
+    function startOfLocalDay(date) {
+      return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    }
+
+    function addDays(date, days) {
+      const copy = new Date(date);
+      copy.setDate(copy.getDate() + days);
+      return copy;
+    }
+
+    function localDateKey(date) {
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, "0");
+      const day = String(date.getDate()).padStart(2, "0");
+      return `${year}-${month}-${day}`;
     }
 
     function numberConditionMatches(rawValue, condition) {
@@ -1157,6 +1229,13 @@ const technicians = [
           { value: "onOrBefore", label: "On/before" },
           { value: "onOrAfter", label: "On/after" },
           { value: "between", label: "Between" },
+          { value: "today", label: "Today" },
+          { value: "yesterday", label: "Yesterday" },
+          { value: "tomorrow", label: "Tomorrow" },
+          { value: "thisWeek", label: "This week" },
+          { value: "thisMonth", label: "This month" },
+          { value: "lastDays", label: "Last days" },
+          { value: "nextDays", label: "Next days" },
           { value: "empty", label: "Blank" },
           { value: "notEmpty", label: "Not blank" }
         ];
@@ -1181,6 +1260,16 @@ const technicians = [
 
     function renderConditionValueControl(condition, index, fieldType) {
       if (fieldType === "date" || fieldType === "number") {
+        if (fieldType === "date" && relativeDateOperators().includes(condition.operator)) {
+          if (condition.operator === "lastDays" || condition.operator === "nextDays") {
+            return `
+              <div class="condition-range-inputs single">
+                <input type="number" min="1" max="365" data-condition-scalar="${index}" value="${escapeHtml(condition.value || "7")}" aria-label="Number of days">
+              </div>
+            `;
+          }
+          return `<div class="condition-static-value">Relative date</div>`;
+        }
         const inputType = fieldType === "date" ? "date" : "number";
         const disabled = ["empty", "notEmpty"].includes(condition.operator) ? "disabled" : "";
         return `
@@ -1241,6 +1330,12 @@ const technicians = [
           const condition = state.draftFilter.conditions[Number(select.dataset.conditionOperator)];
           condition.operator = select.value;
           if (["empty", "notEmpty"].includes(condition.operator)) {
+            condition.value = "";
+            condition.valueEnd = "";
+          } else if (condition.operator === "lastDays" || condition.operator === "nextDays") {
+            condition.value = condition.value || "7";
+            condition.valueEnd = "";
+          } else if (relativeDateOperators().includes(condition.operator)) {
             condition.value = "";
             condition.valueEnd = "";
           }
@@ -2780,6 +2875,7 @@ const technicians = [
       if (state.selectedTeams.length && !state.selectedTechs.length) {
         state.selectedTechs = Array.from(filteredIds);
       }
+      ensureSelectedTechnicians();
       saveLocalSettings();
     }
 
