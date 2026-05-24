@@ -227,7 +227,7 @@ async function handleTicketLoad(payload, env) {
     includecompleted: "false",
     includetickettype: "true",
     includestatus: "true",
-    include_custom_fields: env.HALO_DISPATCH_DATE_FIELD_ID || "",
+    include_custom_fields: dispatchDateFieldId(env),
     count: String(pageSize(env)),
     order: "dateoccured",
     orderdesc: "true"
@@ -279,7 +279,7 @@ function normalizeTicket(ticket, env) {
     || ticket.teamName
     || ticket.team?.name
     || (typeof rawTeam === "string" && !/^\d+$/.test(rawTeam) ? rawTeam : "");
-  const customDate = customFieldValue(ticket, env.HALO_DISPATCH_DATE_FIELD_ID || "486");
+  const customDate = customFieldValue(ticket, dispatchDateFieldId(env), dispatchDateFieldName(env));
   const serviceZone = customFieldValue(ticket, "Service Zone");
   return {
     id: Number(id),
@@ -352,7 +352,7 @@ async function handleAppointmentLoad(payload, env) {
 
 async function handleDateOnlyTaskLoad(payload, env) {
   const date = payload.date;
-  const dateFieldId = env.HALO_DISPATCH_DATE_FIELD_ID;
+  const dateFieldId = dispatchDateFieldId(env);
   const agentIds = (payload.technicianIds || []).map(String).filter(Boolean);
   if (!date || !dateFieldId || !agentIds.length) {
     return { ok: true, data: { tasks: [] }, meta: { rawCount: 0, normalizedCount: 0 } };
@@ -371,7 +371,7 @@ async function handleDateOnlyTaskLoad(payload, env) {
   const { records: rawTickets, meta } = await haloGetAllPages(env, "/api/Tickets", params);
   debugLog(env, "loadDateOnlyTasks request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages });
   const normalizedTasks = rawTickets
-    .map(ticket => normalizeDateOnlyTicket(ticket, dateFieldId))
+    .map(ticket => normalizeDateOnlyTicket(ticket, dateFieldId, env))
     .filter(Boolean)
     .filter(task => !task.completed)
     .filter(task => agentIds.includes(String(task.techId)));
@@ -494,10 +494,10 @@ async function handleDispatchSavedFilterDelete(payload, env) {
   return saveCustomTableRow(env, tableId, row, existing, table.fields);
 }
 
-function normalizeDateOnlyTicket(ticket, dateFieldId) {
+function normalizeDateOnlyTicket(ticket, dateFieldId, env) {
   const ticketId = ticket.id ?? ticket.faultid ?? ticket.fault_id;
-  const techId = ticket.agent_id ?? ticket.agentid ?? ticket.assigned_agent_id;
-  const date = String(customFieldValue(ticket, dateFieldId) || "").slice(0, 10);
+  const techId = ticket.agent_id ?? ticket.agentid ?? ticket.assigned_agent_id ?? ticket.assigned_agentid ?? ticket.owner_agent_id;
+  const date = datePart(customFieldValue(ticket, dateFieldId, "CFTaskWithoutTimeDate"), env) || "";
   if (!ticketId || !techId || !date) return null;
 
   return {
@@ -512,20 +512,26 @@ function normalizeDateOnlyTicket(ticket, dateFieldId) {
   };
 }
 
-function customFieldValue(ticket, fieldId) {
+function customFieldValue(ticket, fieldId, fieldName = "") {
   const fields = Array.isArray(ticket.customfields) ? ticket.customfields : [];
   const wanted = String(fieldId).toLowerCase();
+  const wantedName = String(fieldName || "").toLowerCase();
   const match = fields.find(field => {
     const candidates = [
       field.id,
       field.customfield_id,
+      field.customfieldid,
+      field.field_id,
       field.name,
       field.label,
       field.display_name
     ].map(value => String(value || "").toLowerCase());
-    return candidates.includes(wanted) || (wanted === "486" && field.name === "CFTaskWithoutTimeDate");
+    return candidates.includes(wanted)
+      || (wantedName && candidates.includes(wantedName))
+      || candidates.includes("cftaskwithouttimedate")
+      || candidates.includes("486");
   });
-  return match?.value ?? match?.display ?? match?.text ?? "";
+  return match?.value ?? match?.display ?? match?.text ?? match?.display_value ?? match?.value_display ?? "";
 }
 
 function isCompletedTicket(ticket) {
@@ -725,7 +731,7 @@ function appointmentPayload(payload, env, options = {}) {
 }
 
 function ticketAssignmentPayload(payload, env) {
-  const dateFieldId = env.HALO_DISPATCH_DATE_FIELD_ID;
+  const dateFieldId = dispatchDateFieldId(env);
   if (!dateFieldId) {
     throw new Error("Missing Worker variable: HALO_DISPATCH_DATE_FIELD_ID");
   }
@@ -736,11 +742,19 @@ function ticketAssignmentPayload(payload, env) {
     customfields: [
       {
         id: Number(dateFieldId),
-        name: env.HALO_DISPATCH_DATE_FIELD_NAME || "CFTaskWithoutTimeDate",
+        name: dispatchDateFieldName(env),
         value: payload.dateFieldValue ?? payload.date
       }
     ]
   };
+}
+
+function dispatchDateFieldId(env) {
+  return String(env.HALO_DISPATCH_DATE_FIELD_ID || "486");
+}
+
+function dispatchDateFieldName(env) {
+  return env.HALO_DISPATCH_DATE_FIELD_NAME || "CFTaskWithoutTimeDate";
 }
 
 function haloAgentId(technicianId, env) {

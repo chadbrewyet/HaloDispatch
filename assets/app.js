@@ -2870,10 +2870,12 @@ const technicians = [
       const availableTeamIds = new Set(teams.map(team => team.id));
       state.selectedTeams = state.selectedTeams.filter(id => availableTeamIds.has(id));
 
-      const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
-      state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
-      if (state.selectedTeams.length && !state.selectedTechs.length) {
-        state.selectedTechs = Array.from(filteredIds);
+      const technicianIds = new Set(technicians.map(tech => tech.id));
+      state.selectedTechs = state.selectedTechs.filter(id => technicianIds.has(id));
+      if (state.selectedTeams.length) {
+        const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
+        state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
+        if (!state.selectedTechs.length) state.selectedTechs = Array.from(filteredIds);
       }
       ensureSelectedTechnicians();
       saveLocalSettings();
