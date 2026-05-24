@@ -420,6 +420,7 @@ const technicians = [
 
       const filteredIds = filteredTechnicians().map(tech => tech.id);
       if (state.selectedTeams.length && filteredIds.length) state.selectedTechs = filteredIds;
+      if (!state.selectedTechs.length && technicians.length) state.selectedTechs = technicians.map(tech => tech.id);
     }
 
     function scheduleHaloPreferenceSave() {
