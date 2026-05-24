@@ -281,7 +281,7 @@ function normalizeTicket(ticket, env) {
     || ticket.teamName
     || ticket.team?.name
     || (typeof rawTeam === "string" && !/^\d+$/.test(rawTeam) ? rawTeam : "");
-  const customDate = customFieldValue(ticket, dispatchDateFieldId(env), dispatchDateFieldName(env));
+  const customDate = customDatePart(customFieldValue(ticket, dispatchDateFieldId(env), dispatchDateFieldName(env)));
   const serviceZone = customFieldValue(ticket, "Service Zone");
   return {
     id: Number(id),
@@ -361,7 +361,6 @@ function appointmentQueryVariants(date, agentIds) {
   const common = {
     agents: agentIds.join(","),
     showall: "true",
-    appointmentsonly: "true",
     showappointments: "true",
     excluderecurringmaster: "true",
     count: String(DEFAULT_PAGE_SIZE)
@@ -371,6 +370,24 @@ function appointmentQueryVariants(date, agentIds) {
       name: "datetime",
       params: new URLSearchParams({
         ...common,
+        start_date: `${date}T00:00:00`,
+        end_date: `${date}T23:59:59`
+      })
+    },
+    {
+      name: "datetime-appointments-only",
+      params: new URLSearchParams({
+        ...common,
+        appointmentsonly: "true",
+        start_date: `${date}T00:00:00`,
+        end_date: `${date}T23:59:59`
+      })
+    },
+    {
+      name: "datetime-tasks-only",
+      params: new URLSearchParams({
+        ...common,
+        tasksonly: "true",
         start_date: `${date}T00:00:00`,
         end_date: `${date}T23:59:59`
       })
@@ -554,7 +571,7 @@ async function handleDispatchSavedFilterDelete(payload, env) {
 function normalizeDateOnlyTicket(ticket, dateFieldId, env) {
   const ticketId = ticket.id ?? ticket.faultid ?? ticket.fault_id;
   const techId = ticket.agent_id ?? ticket.agentid ?? ticket.assigned_agent_id ?? ticket.assigned_agentid ?? ticket.owner_agent_id;
-  const date = datePart(customFieldValue(ticket, dateFieldId, "CFTaskWithoutTimeDate"), env) || "";
+  const date = customDatePart(customFieldValue(ticket, dateFieldId, "CFTaskWithoutTimeDate"));
   if (!ticketId || !techId || !date) return null;
 
   return {
@@ -968,6 +985,10 @@ function durationMinutes(startDate, endDate) {
 function datePart(value, env) {
   const local = localDateTimeParts(value, env);
   return local ? local.date : String(value || "").slice(0, 10);
+}
+
+function customDatePart(value) {
+  return String(value || "").trim().slice(0, 10);
 }
 
 function timePart(value, env) {
