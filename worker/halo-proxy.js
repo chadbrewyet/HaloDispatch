@@ -27,6 +27,7 @@ const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_PAGES = 50;
 const DEFAULT_USER_PREF_TABLE_ID = 1013;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
+const WORKER_BUILD = "2026-05-24-field-mapping";
 
 export default {
   async fetch(request, env) {
@@ -38,7 +39,7 @@ export default {
 
     try {
       if (url.pathname === "/api/health") {
-        return json({ ok: true, service: "halo-dispatch-api" });
+        return json({ ok: true, service: "halo-dispatch-api", build: WORKER_BUILD });
       }
 
       if (url.pathname === "/api/halo/action" && request.method === "POST") {
@@ -228,6 +229,7 @@ async function handleTicketLoad(payload, env) {
     includetickettype: "true",
     includestatus: "true",
     include_custom_fields: dispatchDateFieldId(env),
+    include_customfields: dispatchDateFieldId(env),
     count: String(pageSize(env)),
     order: "dateoccured",
     orderdesc: "true"
@@ -313,18 +315,9 @@ async function handleAppointmentLoad(payload, env) {
 
   const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "");
   const agentIds = (payload.technicianIds?.length ? payload.technicianIds : configuredTechnicianIds).map(String);
-  const params = new URLSearchParams({
-    start_date: `${date}T00:00:00`,
-    end_date: `${date}T23:59:59`,
-    agents: agentIds.join(","),
-    showall: "true",
-    showappointments: "true",
-    excluderecurringmaster: "true",
-    count: String(pageSize(env))
-  });
-
-  const { records: rawAppointments, meta } = await haloGetAllPages(env, "/api/Appointment", params);
-  debugLog(env, "loadAppointments request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages });
+  const appointmentLoad = await loadAppointmentsWithFallbacks(env, date, agentIds);
+  const { records: rawAppointments, meta } = appointmentLoad;
+  debugLog(env, "loadAppointments request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages, variant: meta.variant });
 
   const appointments = rawAppointments
     .flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
@@ -350,6 +343,58 @@ async function handleAppointmentLoad(payload, env) {
   };
 }
 
+async function loadAppointmentsWithFallbacks(env, date, agentIds) {
+  const variants = appointmentQueryVariants(date, agentIds);
+  let bestResult = { records: [], meta: { firstPath: "", pages: 0, variant: "" } };
+
+  for (const variant of variants) {
+    const result = await haloGetAllPages(env, "/api/Appointment", variant.params);
+    result.meta.variant = variant.name;
+    if (!bestResult.records.length) bestResult = result;
+    if (result.records.length) return result;
+  }
+
+  return bestResult;
+}
+
+function appointmentQueryVariants(date, agentIds) {
+  const common = {
+    agents: agentIds.join(","),
+    showall: "true",
+    appointmentsonly: "true",
+    showappointments: "true",
+    excluderecurringmaster: "true",
+    count: String(DEFAULT_PAGE_SIZE)
+  };
+  return [
+    {
+      name: "datetime",
+      params: new URLSearchParams({
+        ...common,
+        start_date: `${date}T00:00:00`,
+        end_date: `${date}T23:59:59`
+      })
+    },
+    {
+      name: "date-only",
+      params: new URLSearchParams({
+        ...common,
+        start_date: date,
+        end_date: date
+      })
+    },
+    {
+      name: "datetime-no-agent-filter",
+      params: new URLSearchParams({
+        ...common,
+        agents: "",
+        start_date: `${date}T00:00:00`,
+        end_date: `${date}T23:59:59`
+      })
+    }
+  ];
+}
+
 async function handleDateOnlyTaskLoad(payload, env) {
   const date = payload.date;
   const dateFieldId = dispatchDateFieldId(env);
@@ -360,7 +405,9 @@ async function handleDateOnlyTaskLoad(payload, env) {
 
   const params = new URLSearchParams({
     include_custom_fields: String(dateFieldId),
+    include_customfields: String(dateFieldId),
     agent: agentIds.join(","),
+    agent_id: agentIds.join(","),
     includeallopen: "true",
     includecompleted: "false",
     includeclosed: "false",
@@ -368,7 +415,17 @@ async function handleDateOnlyTaskLoad(payload, env) {
     includetickettype: "true",
     count: String(pageSize(env))
   });
-  const { records: rawTickets, meta } = await haloGetAllPages(env, "/api/Tickets", params);
+  let { records: rawTickets, meta } = await haloGetAllPages(env, "/api/Tickets", params);
+  if (!rawTickets.length) {
+    const broadParams = new URLSearchParams(params);
+    broadParams.delete("agent");
+    broadParams.delete("agent_id");
+    const broadResult = await haloGetAllPages(env, "/api/Tickets", broadParams);
+    rawTickets = broadResult.records;
+    meta = { ...broadResult.meta, variant: "no-agent-filter" };
+  } else {
+    meta.variant = "agent-filter";
+  }
   debugLog(env, "loadDateOnlyTasks request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages });
   const normalizedTasks = rawTickets
     .map(ticket => normalizeDateOnlyTicket(ticket, dateFieldId, env))
@@ -513,6 +570,9 @@ function normalizeDateOnlyTicket(ticket, dateFieldId, env) {
 }
 
 function customFieldValue(ticket, fieldId, fieldName = "") {
+  const directValue = directCustomFieldValue(ticket, fieldId, fieldName);
+  if (directValue !== undefined && directValue !== null && directValue !== "") return directValue;
+
   const fields = Array.isArray(ticket.customfields) ? ticket.customfields : [];
   const wanted = String(fieldId).toLowerCase();
   const wantedName = String(fieldName || "").toLowerCase();
@@ -524,14 +584,49 @@ function customFieldValue(ticket, fieldId, fieldName = "") {
       field.field_id,
       field.name,
       field.label,
-      field.display_name
+      field.display_name,
+      field.customfield_name,
+      field.customfieldname,
+      field.field_name,
+      field.input_name,
+      field.variable_name
     ].map(value => String(value || "").toLowerCase());
     return candidates.includes(wanted)
       || (wantedName && candidates.includes(wantedName))
       || candidates.includes("cftaskwithouttimedate")
-      || candidates.includes("486");
+      || candidates.includes("486")
+      || candidates.includes("$cf00486");
   });
-  return match?.value ?? match?.display ?? match?.text ?? match?.display_value ?? match?.value_display ?? "";
+  return customFieldEntryValue(match);
+}
+
+function directCustomFieldValue(ticket, fieldId, fieldName = "") {
+  const keys = [
+    fieldName,
+    String(fieldName || "").toLowerCase(),
+    String(fieldName || "").toUpperCase(),
+    fieldId,
+    `CF${fieldId}`,
+    `cf${fieldId}`,
+    `$CF${String(fieldId).padStart(5, "0")}`,
+    `customfield_${fieldId}`,
+    "CFTaskWithoutTimeDate",
+    "cftaskwithouttimedate",
+    "$CF00486"
+  ].filter(Boolean);
+  for (const key of keys) {
+    if (Object.prototype.hasOwnProperty.call(ticket, key)) return ticket[key];
+  }
+  return undefined;
+}
+
+function customFieldEntryValue(field) {
+  const value = field?.value ?? field?.display ?? field?.text ?? field?.display_value ?? field?.value_display ?? "";
+  if (Array.isArray(value)) return value.map(item => customFieldEntryValue(item)).find(Boolean) || "";
+  if (value && typeof value === "object") {
+    return value.value ?? value.display ?? value.text ?? value.name ?? value.label ?? "";
+  }
+  return value;
 }
 
 function isCompletedTicket(ticket) {
@@ -571,14 +666,16 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const displayId = ticketId ?? appointment.id ?? appointment.appointment_id;
   if (!displayId) return [];
 
-  const agentIds = appointmentAgentIds(appointment).filter(agentId => allowedAgentIds.includes(agentId));
+  let agentIds = appointmentAgentIds(appointment).filter(agentId => allowedAgentIds.includes(agentId));
+  if (!agentIds.length && allowedAgentIds.length === 1) agentIds = allowedAgentIds;
   if (!agentIds.length) return [];
 
-  const startDate = appointment.start_date || appointment.startdate || appointment.start_date_only;
-  const endDate = appointment.end_date || appointment.enddate || appointment.end_date_only;
+  const startDate = appointmentDateValue(appointment, "start") || date;
+  const endDate = appointmentDateValue(appointment, "end") || startDate;
+  const allDay = isTrue(appointment.allday ?? appointment.all_day ?? appointment.isallday ?? appointment.is_all_day);
   const startTime = timePart(startDate, env) || "00:00";
-  const duration = appointment.allday ? 1440 : durationMinutes(startDate, endDate);
-  const kind = appointment.allday ? "allDay" : "timed";
+  const duration = allDay ? 1440 : durationMinutes(startDate, endDate);
+  const kind = allDay ? "allDay" : "timed";
   const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
   const completed = isCompletedAppointment(appointment);
 
@@ -611,15 +708,44 @@ function isCompletedAppointment(appointment) {
 function appointmentAgentIds(appointment) {
   const agents = Array.isArray(appointment.agents) ? appointment.agents : [];
   const fromAgents = agents
-    .map(agent => agent.id ?? agent.agent_id ?? agent.agentid ?? agent.agentId)
+    .flatMap(agent => splitAgentIds(agent.id ?? agent.agent_id ?? agent.agentid ?? agent.agentId ?? agent.resource_id ?? agent.resourceid))
     .filter(value => value !== undefined && value !== null);
   const primary = [
     appointment.agent_id,
     appointment.agentid,
     appointment.agentId,
-    appointment.scheduled_for_id
-  ].filter(value => value !== undefined && value !== null);
+    appointment.assigned_agent_id,
+    appointment.assigned_agentid,
+    appointment.scheduled_for_id,
+    appointment.scheduledforid,
+    appointment.resource_id,
+    appointment.resourceid,
+    appointment.owner_agent_id,
+    appointment.owneragentid,
+    appointment.agent_ids,
+    appointment.agentids
+  ].flatMap(splitAgentIds).filter(value => value !== undefined && value !== null);
   return Array.from(new Set([...primary, ...fromAgents].map(String)));
+}
+
+function splitAgentIds(value) {
+  if (Array.isArray(value)) return value.flatMap(splitAgentIds);
+  if (value === undefined || value === null || value === "") return [];
+  return String(value).split(",").map(entry => entry.trim()).filter(Boolean);
+}
+
+function appointmentDateValue(appointment, part) {
+  const prefix = part === "end" ? "end" : "start";
+  return appointment[`${prefix}_date`]
+    || appointment[`${prefix}date`]
+    || appointment[`${prefix}_datetime`]
+    || appointment[`${prefix}datetime`]
+    || appointment[`${prefix}_time`]
+    || appointment[`${prefix}time`]
+    || appointment[`${prefix}_date_only`]
+    || appointment[`${prefix}dateonly`]
+    || (prefix === "start" ? appointment.date : "")
+    || (prefix === "start" ? appointment.appointment_date : "");
 }
 
 async function handleTechnicianLoad(payload, env) {
@@ -902,7 +1028,8 @@ function parseListEnv(value) {
 }
 
 function isTrue(value) {
-  return value === true || String(value).toLowerCase() === "true";
+  const text = String(value).toLowerCase();
+  return value === true || text === "true" || text === "1" || text === "yes";
 }
 
 function unwrapList(data) {

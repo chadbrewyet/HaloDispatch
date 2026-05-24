@@ -2470,11 +2470,14 @@ const technicians = [
           .map(input => input.value)
           .filter(value => value !== "__all");
       }
-      const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
-      state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
-      if (state.selectedTeams.length && !state.selectedTechs.length) {
-        state.selectedTechs = Array.from(filteredIds);
+      const technicianIds = new Set(technicians.map(tech => tech.id));
+      state.selectedTechs = state.selectedTechs.filter(id => technicianIds.has(id));
+      if (state.selectedTeams.length) {
+        const filteredIds = new Set(filteredTechnicians().map(tech => tech.id));
+        state.selectedTechs = state.selectedTechs.filter(id => filteredIds.has(id));
+        if (!state.selectedTechs.length) state.selectedTechs = Array.from(filteredIds);
       }
+      ensureSelectedTechnicians();
       saveLocalSettings();
       renderTeamSelect();
       renderTechPicker();
