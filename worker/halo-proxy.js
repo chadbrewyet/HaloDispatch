@@ -1056,6 +1056,7 @@ function isTrue(value) {
 function unwrapList(data) {
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.agents)) return data.agents;
+  if (Array.isArray(data?.appointments)) return data.appointments;
   if (Array.isArray(data?.ticketTypes)) return data.ticketTypes;
   if (Array.isArray(data?.requesttypes)) return data.requesttypes;
   if (Array.isArray(data?.requestTypes)) return data.requestTypes;

@@ -3025,7 +3025,6 @@ const technicians = [
     }
 
     function shouldShowTicketCard(ticket) {
-      if (ticket.dateField && !isSelectedDate(ticket.dateField)) return false;
       return !isTicketScheduled(ticket.id);
     }
 
