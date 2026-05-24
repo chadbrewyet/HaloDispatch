@@ -937,9 +937,10 @@ const technicians = [
       const report = reports.find(item => item.id === reportId) || reports[0];
       const key = sectionKey(index);
       const filter = ensureListFilter(key);
+      const activeConditions = filterConditions(filter).filter(conditionActive);
       return tickets.filter(ticket => {
-        if (ticket.report !== report.id || !shouldShowTicketCard(ticket)) return false;
-        const activeConditions = filterConditions(filter).filter(conditionActive);
+        if (ticket.report !== report.id) return false;
+        if (!activeConditions.length && !shouldShowTicketCard(ticket)) return false;
         if (!activeConditions.length) return true;
         return activeConditions.reduce((matches, condition, index) => {
           const conditionMatches = ticketMatchesCondition(ticket, condition);
