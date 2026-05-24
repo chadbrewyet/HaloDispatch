@@ -100,6 +100,7 @@ const technicians = [
     const $ = (id) => document.getElementById(id);
 
     async function init() {
+      document.body.classList.add("booting");
       const today = new Date();
       $("boardDate").value = today.toISOString().slice(0, 10);
       state.boardItems.forEach(item => {
@@ -126,12 +127,32 @@ const technicians = [
       resetAppointmentRefreshTimer();
       resetTicketRefreshTimer();
       resetCurrentTimeTimer();
-      toast("Ready", state.mockMode ? "Dispatch board loaded in mock mode." : "Dispatch board connected to HaloPSA.");
+      try {
+        await loadInitialHaloState();
+        toast("Ready", state.mockMode ? "Dispatch board loaded in mock mode." : "Dispatch board connected to HaloPSA.");
+      } finally {
+        setLoadingMessage("Opening board...");
+        renderAll();
+        document.body.classList.remove("booting");
+      }
+    }
+
+    async function loadInitialHaloState() {
+      setLoadingMessage(state.mockMode ? "Starting mock mode..." : "Loading Halo agents...");
       await loadHaloTechnicians({ quiet: true, skipAppointments: true });
+      setLoadingMessage("Loading ticket types...");
       await loadHaloTicketTypes();
-      await loadHaloStorage({ quiet: true });
+      setLoadingMessage("Loading saved preferences...");
+      await loadHaloStorage({ quiet: true, skipReload: true });
+      setLoadingMessage("Loading service tickets...");
       await loadHaloTickets({ quiet: true });
+      setLoadingMessage("Loading calendars...");
       await loadHaloAppointments({ quiet: true });
+    }
+
+    function setLoadingMessage(message) {
+      const element = $("loadingMessage");
+      if (element) element.textContent = message;
     }
 
     function bindEvents() {
@@ -233,6 +254,9 @@ const technicians = [
       });
       $("filterModalColor").addEventListener("input", () => {
         if (state.draftFilter) state.draftFilter.color = $("filterModalColor").value;
+      });
+      $("filterIncludeAssignedCheck").addEventListener("change", () => {
+        if (state.draftFilter) state.draftFilter.includeAssigned = $("filterIncludeAssignedCheck").checked;
       });
       $("closeTechThemeModalBtn").addEventListener("click", closeTechThemeModal);
       $("cancelTechThemeBtn").addEventListener("click", closeTechThemeModal);
@@ -940,7 +964,7 @@ const technicians = [
       const activeConditions = filterConditions(filter).filter(conditionActive);
       return tickets.filter(ticket => {
         if (ticket.report !== report.id) return false;
-        if (!activeConditions.length && !shouldShowTicketCard(ticket)) return false;
+        if (!filter.includeAssigned && !shouldShowTicketCard(ticket)) return false;
         if (!activeConditions.length) return true;
         return activeConditions.reduce((matches, condition, index) => {
           const conditionMatches = ticketMatchesCondition(ticket, condition);
@@ -1167,6 +1191,7 @@ const technicians = [
         name: filter.name || "",
         title: filter.title || filter.name || "",
         color: filter.color || "#1976a3",
+        includeAssigned: Boolean(filter.includeAssigned),
         conditions: structuredClone(filterConditions(filter))
       };
       if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
@@ -1185,6 +1210,7 @@ const technicians = [
       $("filterModalName").value = state.draftFilter.name || "";
       $("filterModalListTitle").value = state.draftFilter.title || "";
       $("filterModalColor").value = state.draftFilter.color || "#1976a3";
+      $("filterIncludeAssignedCheck").checked = Boolean(state.draftFilter.includeAssigned);
       renderCopyFilterMenu();
       $("filterConditionList").innerHTML = state.draftFilter.conditions.map((condition, index) => renderFilterConditionRow(condition, index)).join("");
       wireFilterModalRows();
@@ -1428,6 +1454,7 @@ const technicians = [
         name: state.draftFilter.name,
         title: state.draftFilter.title || filter.title || name,
         color: filter.color || state.draftFilter.color || "#1976a3",
+        includeAssigned: Boolean(filter.includeAssigned),
         conditions: structuredClone(filterConditions(filter))
       };
       if (!state.draftFilter.conditions.length) state.draftFilter.conditions.push(defaultCondition());
@@ -1440,6 +1467,7 @@ const technicians = [
       state.draftFilter.name = $("filterModalName").value.trim();
       state.draftFilter.title = $("filterModalListTitle").value.trim();
       state.draftFilter.color = $("filterModalColor").value;
+      state.draftFilter.includeAssigned = $("filterIncludeAssignedCheck").checked;
       state.listFilters[state.activeFilterListKey] = normalizeFilterShape(state.draftFilter);
       saveLocalSettings();
       closeFilterModal();
@@ -1451,6 +1479,7 @@ const technicians = [
       state.draftFilter.name = $("filterModalName").value.trim();
       state.draftFilter.title = $("filterModalListTitle").value.trim();
       state.draftFilter.color = $("filterModalColor").value;
+      state.draftFilter.includeAssigned = $("filterIncludeAssignedCheck").checked;
       const name = state.draftFilter.name;
       if (!name) {
         toast("Filter name needed", "Type a filter name before saving it.");
@@ -1471,6 +1500,7 @@ const technicians = [
         name: filter.name || "",
         title: filter.title || filter.name || "",
         color: filter.color || "#1976a3",
+        includeAssigned: Boolean(filter.includeAssigned),
         conditions: structuredClone(filter.conditions || []),
         values: {},
         modes: {}
@@ -2538,8 +2568,10 @@ const technicians = [
         const preferences = result.data?.userPreferences?.preferences;
         if (preferences && Object.keys(preferences).length) {
           applyDispatchPreferencePayload(preferences);
-          loadHaloTickets({ quiet: true });
-          loadHaloAppointments({ quiet: true });
+          if (!options.skipReload) {
+            loadHaloTickets({ quiet: true });
+            loadHaloAppointments({ quiet: true });
+          }
         } else {
           renderDeleteFilterSelect();
           renderReportLists();

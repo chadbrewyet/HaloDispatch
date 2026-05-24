@@ -63,6 +63,63 @@
       font-size: 15px;
     }
 
+    body.booting .app,
+    body.booting .config-drawer,
+    body.booting .modal-backdrop,
+    body.booting .zone-modal,
+    body.booting .ticket-popover,
+    body.booting .toast-log {
+      visibility: hidden;
+    }
+
+    .loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: none;
+      place-items: center;
+      background: var(--bg);
+      color: var(--ink);
+    }
+
+    body.booting .loading-screen {
+      display: grid;
+    }
+
+    .loading-panel {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 22px 24px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: var(--shadow);
+    }
+
+    .loading-mark {
+      width: 52px;
+      height: 52px;
+      display: grid;
+      place-items: center;
+      border-radius: 8px;
+      background: var(--accent);
+      color: white;
+      font-weight: 900;
+      letter-spacing: 0;
+    }
+
+    .loading-panel h1 {
+      margin: 0 0 6px;
+      font-size: 18px;
+    }
+
+    .loading-panel p {
+      margin: 0;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
     button, input, select, textarea {
       font: inherit;
     }
@@ -603,6 +660,11 @@
 
     .list-title-field {
       grid-column: 1 / -1;
+    }
+
+    .filter-assigned-toggle {
+      grid-column: 1 / -1;
+      align-self: center;
     }
 
     .copy-filter-wrap {

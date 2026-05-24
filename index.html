@@ -7,6 +7,15 @@
   <link rel="stylesheet" href="assets/styles.css">
 </head>
 <body>
+  <div class="loading-screen" id="loadingScreen" role="status" aria-live="polite">
+    <div class="loading-panel">
+      <div class="loading-mark">DB</div>
+      <div>
+        <h1>Loading Dispatch Board</h1>
+        <p id="loadingMessage">Connecting to HaloPSA...</p>
+      </div>
+    </div>
+  </div>
   <div class="app">
     <header class="topbar">
       <div class="brand">
@@ -274,6 +283,10 @@
             <label>List Title</label>
             <input id="filterModalListTitle" placeholder="Title shown on the ticket list">
           </div>
+          <label class="toggle-field filter-assigned-toggle">
+            <input id="filterIncludeAssignedCheck" type="checkbox">
+            <span>Include assigned tickets</span>
+          </label>
         </div>
         <div class="filter-condition-list" id="filterConditionList"></div>
       </div>
