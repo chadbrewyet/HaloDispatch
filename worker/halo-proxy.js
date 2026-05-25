@@ -1125,8 +1125,9 @@ async function loadCustomTable(env, tableId) {
   const extraRows = extra.rows;
   extraRows.forEach(row => mergeCustomTableRow(rows, row));
   if (!rows.length) {
-    const sqlRows = await loadCustomTableRowsByQuery(env, tableId, table.db_name);
-    sqlRows.forEach(row => mergeCustomTableRow(rows, row));
+    const queryResult = await loadCustomTableRowsByQuery(env, tableId, table.db_name);
+    queryResult.rows.forEach(row => mergeCustomTableRow(rows, row));
+    extra.summary.push(queryResult.summary);
   }
   return {
     id: Number(table.id || table.customextratableid || tableId),
@@ -1142,7 +1143,9 @@ async function loadCustomTable(env, tableId) {
 }
 
 async function loadCustomTableRowsByQuery(env, tableId, dbName) {
-  if (!isDispatchStorageTableId(tableId) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(String(dbName || ""))) return [];
+  if (!isDispatchStorageTableId(tableId) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(String(dbName || ""))) {
+    return { rows: [], summary: { path: "CustomQuery", skipped: true, tableId, dbName } };
+  }
   const query = [{
     name: `Dispatch Board ${tableId}`,
     sql_script: `select top 500 * from ${dbName}`,
@@ -1154,11 +1157,31 @@ async function loadCustomTableRowsByQuery(env, tableId, dbName) {
       method: "POST",
       body: query
     });
-    return customQueryRows(response.data);
+    const rows = customQueryRows(response.data);
+    return {
+      rows,
+      summary: summarizeCustomQueryResponse(tableId, dbName, response.data, rows.length)
+    };
   } catch (error) {
     debugLog(env, "custom table query fallback failed", { tableId, dbName, error: error.message });
-    return [];
+    return { rows: [], summary: { path: "CustomQuery", tableId, dbName, error: error.message } };
   }
+}
+
+function summarizeCustomQueryResponse(tableId, dbName, data, rowCount) {
+  const results = Array.isArray(data) ? data : unwrapList(data);
+  const first = results[0] || data || {};
+  return {
+    path: "CustomQuery",
+    tableId,
+    dbName,
+    rowCount,
+    responseType: Array.isArray(data) ? "array" : typeof data,
+    resultCount: results.length,
+    keys: first && typeof first === "object" ? Object.keys(first).slice(0, 20) : [],
+    success: first?.run_result?.success ?? first?.success,
+    error: first?.run_result?.error ?? first?.error ?? ""
+  };
 }
 
 function isDispatchStorageTableId(tableId) {
