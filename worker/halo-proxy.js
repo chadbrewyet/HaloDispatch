@@ -1124,6 +1124,10 @@ async function loadCustomTable(env, tableId) {
   const extra = await loadCustomTableRows(env, tableId, fields);
   const extraRows = extra.rows;
   extraRows.forEach(row => mergeCustomTableRow(rows, row));
+  if (!rows.length) {
+    const sqlRows = await loadCustomTableRowsByQuery(env, tableId, table.db_name);
+    sqlRows.forEach(row => mergeCustomTableRow(rows, row));
+  }
   return {
     id: Number(table.id || table.customextratableid || tableId),
     rows,
@@ -1135,6 +1139,43 @@ async function loadCustomTable(env, tableId) {
       ...extra.summary
     ]
   };
+}
+
+async function loadCustomTableRowsByQuery(env, tableId, dbName) {
+  if (!isDispatchStorageTableId(tableId) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(String(dbName || ""))) return [];
+  const query = [{
+    name: `Dispatch Board ${tableId}`,
+    sql_script: `select top 500 * from ${dbName}`,
+    run: true,
+    top_max: 500
+  }];
+  try {
+    const response = await haloRequest(env, "/api/CustomQuery", {
+      method: "POST",
+      body: query
+    });
+    return customQueryRows(response.data);
+  } catch (error) {
+    debugLog(env, "custom table query fallback failed", { tableId, dbName, error: error.message });
+    return [];
+  }
+}
+
+function isDispatchStorageTableId(tableId) {
+  const value = Number(tableId);
+  return value === DEFAULT_USER_PREF_TABLE_ID || value === DEFAULT_SAVED_FILTER_TABLE_ID;
+}
+
+function customQueryRows(data) {
+  const results = Array.isArray(data) ? data : unwrapList(data);
+  return results.flatMap(item => {
+    const sqlResult = item.run_result?.sql_result ?? item.sql_result ?? item.result ?? item.data;
+    if (Array.isArray(sqlResult)) return sqlResult;
+    if (Array.isArray(sqlResult?.rows)) return sqlResult.rows;
+    if (Array.isArray(sqlResult?.data)) return sqlResult.data;
+    if (typeof sqlResult === "string") return parseStorageJson(sqlResult, []);
+    return [];
+  });
 }
 
 function customTableReadPaths(tableId) {
