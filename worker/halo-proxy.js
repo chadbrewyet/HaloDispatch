@@ -1146,12 +1146,12 @@ async function loadCustomTableRowsByQuery(env, tableId, dbName) {
   if (!isDispatchStorageTableId(tableId) || !/^[A-Za-z][A-Za-z0-9_]*$/.test(String(dbName || ""))) {
     return { rows: [], summary: { path: "CustomQuery", skipped: true, tableId, dbName } };
   }
-  const query = [{
+  const query = {
     name: `Dispatch Board ${tableId}`,
-    sql_script: `select top 500 * from ${dbName}`,
+    sql_script: `select * from ${dbName}`,
     run: true,
     top_max: 500
-  }];
+  };
   try {
     const response = await haloRequest(env, "/api/CustomQuery", {
       method: "POST",
