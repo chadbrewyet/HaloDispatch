@@ -484,7 +484,9 @@ async function handleDispatchStorageLoad(payload, env) {
         userPreferenceRows: preferencesTable.rows.length,
         savedFilterRows: filtersTable.rows.length,
         userPreferenceTableId: preferencesTable.id,
-        savedFilterTableId: filtersTable.id
+        savedFilterTableId: filtersTable.id,
+        userPreferenceReadSummary: preferencesTable.readSummary,
+        savedFilterReadSummary: filtersTable.readSummary
       }
     }
   };
@@ -1119,14 +1121,19 @@ async function loadCustomTable(env, tableId) {
   const table = response.data || {};
   const rows = customTableRows(table);
   const fields = Array.isArray(table.fields) ? table.fields : [];
-  const extraRows = await loadCustomTableRows(env, tableId, fields);
+  const extra = await loadCustomTableRows(env, tableId, fields);
+  const extraRows = extra.rows;
   extraRows.forEach(row => mergeCustomTableRow(rows, row));
   return {
     id: Number(table.id || table.customextratableid || tableId),
     rows,
     fields,
     schema: Array.isArray(table.schema) ? table.schema : [],
-    raw: table
+    raw: table,
+    readSummary: [
+      summarizeCustomTableResponse(detailPaths[0], table),
+      ...extra.summary
+    ]
   };
 }
 
@@ -1153,9 +1160,11 @@ async function loadCustomTableRows(env, tableId, fields = []) {
     ])
   ];
   const rows = [];
+  const summary = [];
   for (const path of paths) {
     try {
       const response = await haloRequest(env, path, { method: "GET" });
+      summary.push(summarizeCustomTableResponse(path, response.data));
       customTableRows(response.data || {}).forEach(row => mergeCustomTableRow(rows, row));
       unwrapList(response.data).forEach(entry => {
         if (String(entry.id || entry.customextratableid || entry.usage || "") === String(tableId)) {
@@ -1165,10 +1174,26 @@ async function loadCustomTableRows(env, tableId, fields = []) {
         }
       });
     } catch (error) {
+      summary.push({ path, error: error.message });
       debugLog(env, "custom table row variant failed", { tableId, path, error: error.message });
     }
   }
-  return rows;
+  return { rows, summary };
+}
+
+function summarizeCustomTableResponse(path, data) {
+  const keys = data && typeof data === "object" && !Array.isArray(data) ? Object.keys(data) : [];
+  const arrayKeys = keys
+    .filter(key => Array.isArray(data[key]))
+    .map(key => ({ key, count: data[key].length, sampleKeys: data[key][0] && typeof data[key][0] === "object" ? Object.keys(data[key][0]).slice(0, 12) : [] }));
+  return {
+    path,
+    type: Array.isArray(data) ? "array" : typeof data,
+    keys: keys.slice(0, 30),
+    arrayKeys,
+    arrayCount: Array.isArray(data) ? data.length : undefined,
+    firstArrayKeys: Array.isArray(data) && data[0] && typeof data[0] === "object" ? Object.keys(data[0]).slice(0, 12) : undefined
+  };
 }
 
 function customTableRows(table) {
