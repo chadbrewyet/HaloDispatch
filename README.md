@@ -45,7 +45,8 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
    - `HALO_DISPLAY_TIME_ZONE` controls how Halo calendar times are shown on the dispatch board.
    - `HALO_PAGE_SIZE` and `HALO_MAX_PAGES` control paginated Halo reads. The default page size is `100`.
-   - `HALO_USER_PREF_TABLE_ID` and `HALO_SAVED_FILTER_TABLE_ID` point to the Halo custom tables used for shared storage. Current defaults are `1013` and `1014`.
+   - `HALO_USER_PREF_REPORT_ID` and `HALO_SAVED_FILTER_REPORT_ID` point to the Halo reports used to read shared storage. Current defaults are `476` and `477`.
+   - `HALO_USER_PREF_TABLE_ID` and `HALO_SAVED_FILTER_TABLE_ID` point to the Halo custom tables used to write shared storage. Current defaults are `1013` and `1014`.
 
 5. Store secrets:
 
@@ -85,7 +86,7 @@ The Worker now maps dashboard actions to the HaloPSA Swagger endpoints:
 - all-day task creation: `POST /api/Appointment`
 - without-time assignment: `POST /api/Tickets`
 - scheduled-to-without-time moves: `DELETE /api/Appointment/{id}` then `POST /api/Tickets`
-- dispatch user preferences and saved filters: `GET /api/CustomTable/{id}?includedetails=true` and `POST /api/CustomTable`
+- dispatch user preferences and saved filters: `GET /api/ReportData/{id}` for reads, `POST /api/CustomTable` for writes
 
 Moving an already scheduled appointment to a new time, technician, all-day section, or without-time section uses the loaded Halo `appointment_id` and updates Halo directly.
 
@@ -109,7 +110,12 @@ Technician and team display names are loaded from `GET /api/Agent`. A technician
 
 ## Recommended Halo Storage Tables
 
-The app can now sync local browser settings to Halo custom tables through the Worker. Local storage remains the immediate fallback, so the board still works if a custom-table column name needs adjustment.
+The app can now sync local browser settings to Halo custom tables through the Worker. Storage reads use Halo reports because CustomTable reads may return the table schema without row data. Local storage remains the immediate fallback, so the board still works if a report or custom-table column name needs adjustment.
+
+Current read reports:
+
+- User preferences report ID: `476`
+- Saved filters report ID: `477`
 
 ### DispatchBoardUserPreferences
 

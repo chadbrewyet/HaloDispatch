@@ -27,6 +27,8 @@ const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_PAGES = 50;
 const DEFAULT_USER_PREF_TABLE_ID = 1013;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
+const DEFAULT_USER_PREF_REPORT_ID = 476;
+const DEFAULT_SAVED_FILTER_REPORT_ID = 477;
 const WORKER_BUILD = "2026-05-24-field-mapping";
 
 export default {
@@ -467,13 +469,17 @@ async function handleDateOnlyTaskLoad(payload, env) {
 
 async function handleDispatchStorageLoad(payload, env) {
   const agentId = String(payload.agentId || "").trim();
-  const [preferencesTable, filtersTable] = await Promise.all([
+  const [preferencesReport, filtersReport, preferencesTable, filtersTable] = await Promise.all([
+    loadStorageReport(env, "HALO_USER_PREF_REPORT_ID", DEFAULT_USER_PREF_REPORT_ID),
+    loadStorageReport(env, "HALO_SAVED_FILTER_REPORT_ID", DEFAULT_SAVED_FILTER_REPORT_ID),
     loadCustomTable(env, customTableId(env, "HALO_USER_PREF_TABLE_ID", DEFAULT_USER_PREF_TABLE_ID)),
     loadCustomTable(env, customTableId(env, "HALO_SAVED_FILTER_TABLE_ID", DEFAULT_SAVED_FILTER_TABLE_ID))
   ]);
 
-  const preferences = agentId ? normalizeUserPreferenceRows(preferencesTable.rows, agentId, env) : null;
-  const savedFilters = normalizeSavedFilterRows(filtersTable.rows, env);
+  const preferenceRows = preferencesReport.rows.length ? preferencesReport.rows : preferencesTable.rows;
+  const filterRows = filtersReport.rows.length ? filtersReport.rows : filtersTable.rows;
+  const preferences = agentId ? normalizeUserPreferenceRows(preferenceRows, agentId, env) : null;
+  const savedFilters = normalizeSavedFilterRows(filterRows, env);
 
   return {
     ok: true,
@@ -481,8 +487,12 @@ async function handleDispatchStorageLoad(payload, env) {
       userPreferences: preferences,
       savedFilters,
       meta: {
-        userPreferenceRows: preferencesTable.rows.length,
-        savedFilterRows: filtersTable.rows.length,
+        userPreferenceRows: preferenceRows.length,
+        savedFilterRows: filterRows.length,
+        userPreferenceReportId: storageReportId(env, "HALO_USER_PREF_REPORT_ID", DEFAULT_USER_PREF_REPORT_ID),
+        savedFilterReportId: storageReportId(env, "HALO_SAVED_FILTER_REPORT_ID", DEFAULT_SAVED_FILTER_REPORT_ID),
+        userPreferenceReportMeta: preferencesReport.meta,
+        savedFilterReportMeta: filtersReport.meta,
         userPreferenceTableId: preferencesTable.id,
         savedFilterTableId: filtersTable.id,
         userPreferenceReadSummary: preferencesTable.readSummary,
@@ -490,6 +500,66 @@ async function handleDispatchStorageLoad(payload, env) {
       }
     }
   };
+}
+
+async function loadStorageReport(env, key, fallbackId) {
+  const reportId = storageReportId(env, key, fallbackId);
+  if (!reportId) return { rows: [], meta: { skipped: true } };
+  try {
+    const response = await haloRequest(env, `/api/ReportData/${encodeURIComponent(reportId)}`, { method: "GET" });
+    const rows = normalizeReportRows(response.data);
+    return {
+      rows,
+      meta: {
+        reportId,
+        rawType: Array.isArray(response.data) ? "array" : typeof response.data,
+        rowCount: rows.length,
+        keys: response.data && typeof response.data === "object" && !Array.isArray(response.data) ? Object.keys(response.data).slice(0, 20) : []
+      }
+    };
+  } catch (error) {
+    return { rows: [], meta: { reportId, error: error.message } };
+  }
+}
+
+function storageReportId(env, key, fallbackId) {
+  const value = String(env[key] || fallbackId || "").trim();
+  return value || "";
+}
+
+function normalizeReportRows(data) {
+  if (Array.isArray(data)) return data.map(normalizeReportRow);
+  const candidateArrays = [
+    data?.reportdata,
+    data?.reportData,
+    data?.rows,
+    data?.data,
+    data?.record,
+    data?.records,
+    data?.results,
+    data?.result
+  ];
+  const rows = candidateArrays.find(Array.isArray) || [];
+  return rows.map(normalizeReportRow);
+}
+
+function normalizeReportRow(row) {
+  if (!row || typeof row !== "object") return row;
+  if (Array.isArray(row.cells)) {
+    return row.cells.reduce((record, cell) => {
+      const key = cell.name || cell.column || cell.column_name || cell.label || cell.header || cell.field;
+      if (key) record[key] = cell.value ?? cell.display ?? cell.text ?? "";
+      return record;
+    }, {});
+  }
+  if (Array.isArray(row.columns)) {
+    return row.columns.reduce((record, cell) => {
+      const key = cell.name || cell.column || cell.column_name || cell.label || cell.header || cell.field;
+      if (key) record[key] = cell.value ?? cell.display ?? cell.text ?? "";
+      return record;
+    }, {});
+  }
+  return row;
 }
 
 async function handleDispatchUserPreferenceSave(payload, env) {
@@ -1425,30 +1495,35 @@ function normalizeSavedFilterRows(rows, env) {
 
 function storageFields(env, schema = []) {
   return {
-    prefAgent: fieldAliases(env.HALO_PREF_AGENT_FIELD, ["CFDispatchAgentID", "agent_id", "agentId", "Agent ID", "Agent"], schema),
-    prefTheme: fieldAliases(env.HALO_PREF_THEME_FIELD, ["CFDispatchTheme", "theme", "Dispatch Theme"], schema),
-    prefOrientation: fieldAliases(env.HALO_PREF_ORIENTATION_FIELD, ["CFDispatchOrientation", "orientation", "Calendar Orientation"], schema),
-    prefSelectedTeams: fieldAliases(env.HALO_PREF_SELECTED_TEAMS_FIELD, ["CFDispatchSelectedTeams", "selected_team_ids_json", "Selected Teams"], schema),
-    prefSelectedAgents: fieldAliases(env.HALO_PREF_SELECTED_AGENTS_FIELD, ["CFDispatchSelectedAgents", "selected_agent_ids_json", "Selected Agents"], schema),
-    prefPanelPinned: fieldAliases(env.HALO_PREF_PANEL_PINNED_FIELD, ["CFDispatchPanelPinned", "ticket_panel_pinned", "Ticket Panel Pinned?"], schema),
-    prefPanelWidth: fieldAliases(env.HALO_PREF_PANEL_WIDTH_FIELD, ["CFDispatchPanelWidth", "ticket_panel_width", "Dispatch Ticket Panel Width"], schema),
-    prefCalendarStart: fieldAliases(env.HALO_PREF_CALENDAR_START_FIELD, ["CFDispatchCalendarStartTime", "calendar_start_time", "Calendar Start Time"], schema),
-    prefCalendarEnd: fieldAliases(env.HALO_PREF_CALENDAR_END_FIELD, ["CFDispatchCalendarEndTime", "calendar_end_time", "Calendar End Time"], schema),
-    prefTechThemes: fieldAliases(env.HALO_PREF_TECH_THEMES_FIELD, ["CFDispatchTechThemes", "tech_themes_json", "Tech Themes"], schema),
-    prefVisibleTickets: fieldAliases(env.HALO_PREF_VISIBLE_TICKETS_FIELD, ["CFDispatchVisibleTickets", "visible_ticket_fields_json", "Visible Tickets"], schema),
-    filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, ["CFDispatchFilterName", "filter_name", "name", "Filter Name"], schema),
-    filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, ["CFDispatchFilterTitle", "list_title", "title", "Filter Title"], schema),
-    filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, ["CFDispatchFilterColor", "color", "theme_color", "Filter Color"], schema),
-    filterConditions: fieldAliases(env.HALO_FILTER_CONDITIONS_FIELD, ["CFDispatchFilterConditions", "conditions_json", "filter_conditions", "Filter Conditions"], schema),
+    prefAgent: fieldAliases(env.HALO_PREF_AGENT_FIELD, storageAliases("CFDispatchAgentID", 488, "agent_id", "agentId", "Agent ID", "Agent"), schema),
+    prefTheme: fieldAliases(env.HALO_PREF_THEME_FIELD, storageAliases("CFDispatchTheme", 489, "theme", "Dispatch Theme"), schema),
+    prefOrientation: fieldAliases(env.HALO_PREF_ORIENTATION_FIELD, storageAliases("CFDispatchOrientation", 490, "orientation", "Calendar Orientation"), schema),
+    prefSelectedTeams: fieldAliases(env.HALO_PREF_SELECTED_TEAMS_FIELD, storageAliases("CFDispatchSelectedTeams", 491, "selected_team_ids_json", "Selected Teams"), schema),
+    prefSelectedAgents: fieldAliases(env.HALO_PREF_SELECTED_AGENTS_FIELD, storageAliases("CFDispatchSelectedAgents", 492, "selected_agent_ids_json", "Selected Agents"), schema),
+    prefPanelPinned: fieldAliases(env.HALO_PREF_PANEL_PINNED_FIELD, storageAliases("CFDispatchPanelPinned", 493, "ticket_panel_pinned", "Ticket Panel Pinned?"), schema),
+    prefPanelWidth: fieldAliases(env.HALO_PREF_PANEL_WIDTH_FIELD, storageAliases("CFDispatchPanelWidth", 494, "ticket_panel_width", "Dispatch Ticket Panel Width"), schema),
+    prefCalendarStart: fieldAliases(env.HALO_PREF_CALENDAR_START_FIELD, storageAliases("CFDispatchCalendarStartTime", 495, "calendar_start_time", "Calendar Start Time"), schema),
+    prefCalendarEnd: fieldAliases(env.HALO_PREF_CALENDAR_END_FIELD, storageAliases("CFDispatchCalendarEndTime", 496, "calendar_end_time", "Calendar End Time"), schema),
+    prefTechThemes: fieldAliases(env.HALO_PREF_TECH_THEMES_FIELD, storageAliases("CFDispatchTechThemes", 497, "tech_themes_json", "Tech Themes"), schema),
+    prefVisibleTickets: fieldAliases(env.HALO_PREF_VISIBLE_TICKETS_FIELD, storageAliases("CFDispatchVisibleTickets", 498, "visible_ticket_fields_json", "Visible Tickets"), schema),
+    filterName: fieldAliases(env.HALO_FILTER_NAME_FIELD, storageAliases("CFDispatchFilterName", 502, "filter_name", "name", "Filter Name"), schema),
+    filterTitle: fieldAliases(env.HALO_FILTER_TITLE_FIELD, storageAliases("CFDispatchFilterTitle", 503, "list_title", "title", "Filter Title"), schema),
+    filterColor: fieldAliases(env.HALO_FILTER_COLOR_FIELD, storageAliases("CFDispatchFilterColor", 504, "color", "theme_color", "Filter Color"), schema),
+    filterConditions: fieldAliases(env.HALO_FILTER_CONDITIONS_FIELD, storageAliases("CFDispatchFilterConditions", 505, "conditions_json", "filter_conditions", "Filter Conditions"), schema),
     filterJson: fieldAliases(env.HALO_FILTER_JSON_FIELD, ["filter_json", "filter", "json"], schema),
     filterDeleted: fieldAliases(env.HALO_FILTER_DELETED_FIELD, ["deleted", "is_deleted", "Deleted"], schema),
-    filterCreatedBy: fieldAliases(env.HALO_FILTER_CREATED_BY_FIELD, ["CFDispatchFilterCreatedBy", "created_by_agent_id", "Created By"], schema),
-    filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, ["CFDispatchFilterUpdatedBy", "updated_by_agent_id", "Updated By"], schema),
-    filterActive: fieldAliases(env.HALO_FILTER_ACTIVE_FIELD, ["CFDispatchFilterActive", "is_active", "active", "Is Active"], schema),
-    filterCreatedAt: fieldAliases(env.HALO_FILTER_CREATED_AT_FIELD, ["CFDispatchFilterCreatedAt", "created_at", "Created At"], schema),
-    createdAt: fieldAliases(env.HALO_STORAGE_CREATED_AT_FIELD, ["CFDispatchCreatedAt", "created_at", "Created At"], schema),
-    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, ["CFDispatchUpdatedAt", "CFDispatchFilerUpdatedAt", "updated_at", "Updated At"], schema)
+    filterCreatedBy: fieldAliases(env.HALO_FILTER_CREATED_BY_FIELD, storageAliases("CFDispatchFilterCreatedBy", 506, "created_by_agent_id", "Created By"), schema),
+    filterUpdatedBy: fieldAliases(env.HALO_FILTER_UPDATED_BY_FIELD, storageAliases("CFDispatchFilterUpdatedBy", 507, "updated_by_agent_id", "Updated By"), schema),
+    filterActive: fieldAliases(env.HALO_FILTER_ACTIVE_FIELD, storageAliases("CFDispatchFilterActive", 508, "is_active", "active", "Is Active"), schema),
+    filterCreatedAt: fieldAliases(env.HALO_FILTER_CREATED_AT_FIELD, storageAliases("CFDispatchFilterCreatedAt", 509, "created_at", "Created At"), schema),
+    createdAt: fieldAliases(env.HALO_STORAGE_CREATED_AT_FIELD, storageAliases("CFDispatchCreatedAt", 499, "created_at", "Created At"), schema),
+    updatedAt: fieldAliases(env.HALO_STORAGE_UPDATED_AT_FIELD, storageAliases("CFDispatchUpdatedAt", 500, "CFDispatchFilerUpdatedAt", 510, "updated_at", "Updated At"), schema)
   };
+}
+
+function storageAliases(name, id, ...aliases) {
+  const padded = String(id).padStart(5, "0");
+  return [name, String(id), `CF${id}`, `cf${id}`, `$CF${padded}`, `$cf${padded}`, ...aliases];
 }
 
 function fieldAliases(configured, defaults, schema = []) {
