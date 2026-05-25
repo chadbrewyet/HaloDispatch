@@ -1118,12 +1118,13 @@ async function loadCustomTable(env, tableId) {
   const response = await haloRequestWithFallback(env, detailPaths, { method: "GET" });
   const table = response.data || {};
   const rows = customTableRows(table);
-  const extraRows = await loadCustomTableRows(env, tableId);
+  const fields = Array.isArray(table.fields) ? table.fields : [];
+  const extraRows = await loadCustomTableRows(env, tableId, fields);
   extraRows.forEach(row => mergeCustomTableRow(rows, row));
   return {
     id: Number(table.id || table.customextratableid || tableId),
     rows,
-    fields: Array.isArray(table.fields) ? table.fields : [],
+    fields,
     schema: Array.isArray(table.schema) ? table.schema : [],
     raw: table
   };
@@ -1139,11 +1140,17 @@ function customTableReadPaths(tableId) {
   ];
 }
 
-async function loadCustomTableRows(env, tableId) {
+async function loadCustomTableRows(env, tableId, fields = []) {
+  const fieldIds = fields.map(field => field.id).filter(Boolean);
   const paths = [
     `/api/CustomTable?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
     `/api/CustomTable?customonly=true&usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
-    `/api/CustomTables?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`
+    `/api/CustomTables?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
+    ...fieldIds.flatMap(fieldId => [
+      `/api/CustomTable/${encodeURIComponent(fieldId)}?includedetails=true&includevalues=true&includerows=true&includedata=true`,
+      `/api/CustomTable?usage=${encodeURIComponent(fieldId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
+      `/api/CustomTables/${encodeURIComponent(fieldId)}?includedetails=true&includevalues=true&includerows=true&includedata=true`
+    ])
   ];
   const rows = [];
   for (const path of paths) {
