@@ -45,7 +45,7 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    - `HALO_APPOINTMENT_TYPE_ID` is optional if you want all dispatch appointments to use a specific Halo appointment type.
    - `HALO_DISPLAY_TIME_ZONE` controls how Halo calendar times are shown on the dispatch board.
    - `HALO_PAGE_SIZE` and `HALO_MAX_PAGES` control paginated Halo reads. The default page size is `100`.
-   - `HALO_USER_PREF_REPORT_ID` and `HALO_SAVED_FILTER_REPORT_ID` point to the Halo reports used to read shared storage. Current defaults are `476` and `477`.
+   - `HALO_USER_PREF_REPORT_ID` and `HALO_SAVED_FILTER_REPORT_ID` point to the published Halo reports used to read shared storage.
    - `HALO_USER_PREF_TABLE_ID` and `HALO_SAVED_FILTER_TABLE_ID` point to the Halo custom tables used to write shared storage. Current defaults are `1013` and `1014`.
 
 5. Store secrets:
@@ -117,8 +117,8 @@ The app can now sync local browser settings to Halo custom tables through the Wo
 
 Current read reports:
 
-- User preferences report ID: `476`
-- Saved filters report ID: `477`
+- User preferences published report ID: `267cb7b5-35de-48e6-baf8-936feaf90949`
+- Saved filters published report ID: `7ff3826a-f693-43dd-a7dc-333acf2d0a63`
 
 ### DispatchBoardUserPreferences
 

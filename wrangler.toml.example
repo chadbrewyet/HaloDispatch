@@ -30,8 +30,8 @@ HALO_MAX_PAGES = "50"
 
 # Halo custom table storage for dispatch preferences and shared saved filters.
 # Reports are used for storage reads because CustomTable reads can return schema without rows.
-HALO_USER_PREF_REPORT_ID = "476"
-HALO_SAVED_FILTER_REPORT_ID = "477"
+HALO_USER_PREF_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949"
+HALO_SAVED_FILTER_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63"
 HALO_USER_PREF_TABLE_ID = "1013"
 HALO_SAVED_FILTER_TABLE_ID = "1014"
 
