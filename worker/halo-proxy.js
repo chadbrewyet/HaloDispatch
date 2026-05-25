@@ -508,21 +508,33 @@ async function loadStorageReport(env, key, fallbackId) {
   try {
     const response = await haloRequest(env, `/api/ReportData/${encodeURIComponent(reportId)}`, {
       method: "GET",
-      bearerToken: env.HALO_REPORT_BEARER_TOKEN
+      bearerToken: cleanBearerToken(env.HALO_REPORT_BEARER_TOKEN)
     });
     const rows = normalizeReportRows(response.data);
     return {
       rows,
       meta: {
         reportId,
+        authConfigured: Boolean(cleanBearerToken(env.HALO_REPORT_BEARER_TOKEN)),
         rawType: Array.isArray(response.data) ? "array" : typeof response.data,
         rowCount: rows.length,
         keys: response.data && typeof response.data === "object" && !Array.isArray(response.data) ? Object.keys(response.data).slice(0, 20) : []
       }
     };
   } catch (error) {
-    return { rows: [], meta: { reportId, error: error.message } };
+    return {
+      rows: [],
+      meta: {
+        reportId,
+        authConfigured: Boolean(cleanBearerToken(env.HALO_REPORT_BEARER_TOKEN)),
+        error: error.message
+      }
+    };
   }
+}
+
+function cleanBearerToken(value) {
+  return String(value || "").trim().replace(/^Bearer\s+/i, "").trim();
 }
 
 function storageReportId(env, key, fallbackId) {
