@@ -520,6 +520,7 @@ async function loadStorageReport(env, key, fallbackId) {
         authConfigured: Boolean(reportToken),
         rawType: Array.isArray(response.data) ? "array" : typeof response.data,
         rowCount: rows.length,
+        rowKeys: reportRowKeys(rows),
         keys: response.data && typeof response.data === "object" && !Array.isArray(response.data) ? Object.keys(response.data).slice(0, 20) : []
       }
     };
@@ -537,6 +538,7 @@ async function loadStorageReport(env, key, fallbackId) {
             publishedTokenError: error.message,
             rawType: Array.isArray(response.data) ? "array" : typeof response.data,
             rowCount: rows.length,
+            rowKeys: reportRowKeys(rows),
             keys: response.data && typeof response.data === "object" && !Array.isArray(response.data) ? Object.keys(response.data).slice(0, 20) : []
           }
         };
@@ -567,6 +569,11 @@ async function loadStorageReport(env, key, fallbackId) {
 
 function cleanBearerToken(value) {
   return String(value || "").trim().replace(/^Bearer\s+/i, "").trim();
+}
+
+function reportRowKeys(rows) {
+  const first = rows.find(row => row && typeof row === "object");
+  return first ? Object.keys(first).slice(0, 40) : [];
 }
 
 function storageReportId(env, key, fallbackId) {
@@ -1039,8 +1046,10 @@ function haloAgentId(technicianId, env) {
 }
 
 function reportPublishedId(value) {
-  const match = String(value || "").match(/\d+/);
-  return match ? match[0] : "";
+  const text = String(value || "").trim();
+  const reportDataMatch = text.match(/ReportData\/([^/?#]+)/i);
+  if (reportDataMatch) return reportDataMatch[1];
+  return text;
 }
 
 function combineDateTime(date, time) {
