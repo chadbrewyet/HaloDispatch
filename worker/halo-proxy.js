@@ -1140,23 +1140,22 @@ async function loadCustomTable(env, tableId) {
 function customTableReadPaths(tableId) {
   const encoded = encodeURIComponent(tableId);
   return [
-    `/api/CustomTable/${encoded}?includedetails=true&includevalues=true&includerows=true&includedata=true`,
+    `/api/CustomTable/${encoded}?includedetails=true&includevalues=true&includerows=true&includedata=true&loaddata=true&load_data=true`,
     `/api/CustomTable/${encoded}?includedetails=true`,
-    `/api/CustomTables/${encoded}?includedetails=true&includevalues=true&includerows=true&includedata=true`,
+    `/api/CustomTables/${encoded}?includedetails=true&includevalues=true&includerows=true&includedata=true&loaddata=true&load_data=true`,
     `/api/CustomTables/${encoded}?includedetails=true`
   ];
 }
 
 async function loadCustomTableRows(env, tableId, fields = []) {
-  const fieldIds = fields.map(field => field.id).filter(Boolean);
+  const primaryFieldIds = fields.map(field => field.id).filter(Boolean).slice(0, 1);
   const paths = [
-    `/api/CustomTable?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
-    `/api/CustomTable?customonly=true&usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
-    `/api/CustomTables?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
-    ...fieldIds.flatMap(fieldId => [
-      `/api/CustomTable/${encodeURIComponent(fieldId)}?includedetails=true&includevalues=true&includerows=true&includedata=true`,
-      `/api/CustomTable?usage=${encodeURIComponent(fieldId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
-      `/api/CustomTables/${encodeURIComponent(fieldId)}?includedetails=true&includevalues=true&includerows=true&includedata=true`
+    `/api/CustomTable?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true&loaddata=true&load_data=true`,
+    `/api/CustomTable?customonly=true&usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true&loaddata=true&load_data=true`,
+    `/api/CustomTables?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true&loaddata=true&load_data=true`,
+    ...primaryFieldIds.flatMap(fieldId => [
+      `/api/CustomTable/${encodeURIComponent(fieldId)}?includedetails=true&includevalues=true&includerows=true&includedata=true&loaddata=true&load_data=true`,
+      `/api/CustomTable?usage=${encodeURIComponent(fieldId)}&includedetails=true&includevalues=true&includerows=true&includedata=true&loaddata=true&load_data=true`
     ])
   ];
   const rows = [];
