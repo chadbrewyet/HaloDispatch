@@ -505,28 +505,60 @@ async function handleDispatchStorageLoad(payload, env) {
 async function loadStorageReport(env, key, fallbackId) {
   const reportId = storageReportId(env, key, fallbackId);
   if (!reportId) return { rows: [], meta: { skipped: true } };
+  const reportToken = cleanBearerToken(env.HALO_REPORT_BEARER_TOKEN);
   try {
     const response = await haloRequest(env, `/api/ReportData/${encodeURIComponent(reportId)}`, {
       method: "GET",
-      bearerToken: cleanBearerToken(env.HALO_REPORT_BEARER_TOKEN)
+      bearerToken: reportToken
     });
     const rows = normalizeReportRows(response.data);
     return {
       rows,
       meta: {
         reportId,
-        authConfigured: Boolean(cleanBearerToken(env.HALO_REPORT_BEARER_TOKEN)),
+        authMode: reportToken ? "published-token" : "oauth",
+        authConfigured: Boolean(reportToken),
         rawType: Array.isArray(response.data) ? "array" : typeof response.data,
         rowCount: rows.length,
         keys: response.data && typeof response.data === "object" && !Array.isArray(response.data) ? Object.keys(response.data).slice(0, 20) : []
       }
     };
   } catch (error) {
+    if (reportToken) {
+      try {
+        const response = await haloRequest(env, `/api/ReportData/${encodeURIComponent(reportId)}`, { method: "GET" });
+        const rows = normalizeReportRows(response.data);
+        return {
+          rows,
+          meta: {
+            reportId,
+            authMode: "oauth-after-published-token-failed",
+            authConfigured: true,
+            publishedTokenError: error.message,
+            rawType: Array.isArray(response.data) ? "array" : typeof response.data,
+            rowCount: rows.length,
+            keys: response.data && typeof response.data === "object" && !Array.isArray(response.data) ? Object.keys(response.data).slice(0, 20) : []
+          }
+        };
+      } catch (fallbackError) {
+        return {
+          rows: [],
+          meta: {
+            reportId,
+            authMode: "published-token-then-oauth",
+            authConfigured: true,
+            publishedTokenError: error.message,
+            error: fallbackError.message
+          }
+        };
+      }
+    }
     return {
       rows: [],
       meta: {
         reportId,
-        authConfigured: Boolean(cleanBearerToken(env.HALO_REPORT_BEARER_TOKEN)),
+        authMode: "oauth",
+        authConfigured: false,
         error: error.message
       }
     };
