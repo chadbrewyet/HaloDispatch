@@ -1114,36 +1114,80 @@ function maxPageCount(env, requested) {
 }
 
 async function loadCustomTable(env, tableId) {
-  const response = await haloRequestWithFallback(env, [
-    `/api/CustomTable/${encodeURIComponent(tableId)}?includedetails=true`,
-    `/api/CustomTables/${encodeURIComponent(tableId)}?includedetails=true`
-  ], { method: "GET" });
+  const detailPaths = customTableReadPaths(tableId);
+  const response = await haloRequestWithFallback(env, detailPaths, { method: "GET" });
   const table = response.data || {};
+  const rows = customTableRows(table);
+  const extraRows = await loadCustomTableRows(env, tableId);
+  extraRows.forEach(row => mergeCustomTableRow(rows, row));
   return {
     id: Number(table.id || table.customextratableid || tableId),
-    rows: customTableRows(table),
+    rows,
     fields: Array.isArray(table.fields) ? table.fields : [],
     schema: Array.isArray(table.schema) ? table.schema : [],
     raw: table
   };
 }
 
+function customTableReadPaths(tableId) {
+  const encoded = encodeURIComponent(tableId);
+  return [
+    `/api/CustomTable/${encoded}?includedetails=true&includevalues=true&includerows=true&includedata=true`,
+    `/api/CustomTable/${encoded}?includedetails=true`,
+    `/api/CustomTables/${encoded}?includedetails=true&includevalues=true&includerows=true&includedata=true`,
+    `/api/CustomTables/${encoded}?includedetails=true`
+  ];
+}
+
+async function loadCustomTableRows(env, tableId) {
+  const paths = [
+    `/api/CustomTable?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
+    `/api/CustomTable?customonly=true&usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`,
+    `/api/CustomTables?usage=${encodeURIComponent(tableId)}&includedetails=true&includevalues=true&includerows=true&includedata=true`
+  ];
+  const rows = [];
+  for (const path of paths) {
+    try {
+      const response = await haloRequest(env, path, { method: "GET" });
+      customTableRows(response.data || {}).forEach(row => mergeCustomTableRow(rows, row));
+      unwrapList(response.data).forEach(entry => {
+        if (String(entry.id || entry.customextratableid || entry.usage || "") === String(tableId)) {
+          customTableRows(entry).forEach(row => mergeCustomTableRow(rows, row));
+        } else if (Array.isArray(entry.customfields)) {
+          mergeCustomTableRow(rows, entry);
+        }
+      });
+    } catch (error) {
+      debugLog(env, "custom table row variant failed", { tableId, path, error: error.message });
+    }
+  }
+  return rows;
+}
+
 function customTableRows(table) {
-  const rows = Array.isArray(table.rows) ? [...table.rows] : [];
+  const rows = [
+    ...(Array.isArray(table.rows) ? table.rows : []),
+    ...(Array.isArray(table.data) ? table.data : []),
+    ...(Array.isArray(table.values) ? table.values : []),
+    ...(Array.isArray(table.value) ? table.value : []),
+    ...(Array.isArray(table.records) ? table.records : [])
+  ];
   const nestedRows = (Array.isArray(table.customfields) ? table.customfields : [])
     .flatMap(field => Array.isArray(field.value) ? field.value : [])
     .filter(row => Array.isArray(row?.customfields));
 
-  nestedRows.forEach(row => {
-    const key = row.id || row.key || row.fkid || row.display || JSON.stringify(row.customfields);
-    const exists = rows.some(entry => {
-      const entryKey = entry.id || entry.key || entry.fkid || entry.display || JSON.stringify(entry.customfields || entry);
-      return String(entryKey) === String(key);
-    });
-    if (!exists) rows.push(row);
-  });
-
+  nestedRows.forEach(row => mergeCustomTableRow(rows, row));
   return rows;
+}
+
+function mergeCustomTableRow(rows, row) {
+  if (!row) return;
+  const key = row.id || row.key || row.fkid || row.display || JSON.stringify(row.customfields || row);
+  const exists = rows.some(entry => {
+    const entryKey = entry.id || entry.key || entry.fkid || entry.display || JSON.stringify(entry.customfields || entry);
+    return String(entryKey) === String(key);
+  });
+  if (!exists) rows.push(row);
 }
 
 async function saveCustomTableRow(env, tableId, row, existingRow, fields = []) {

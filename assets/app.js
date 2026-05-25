@@ -138,12 +138,12 @@ const technicians = [
     }
 
     async function loadInitialHaloState() {
-      setLoadingMessage(state.mockMode ? "Starting mock mode..." : "Loading Halo agents...");
+      setLoadingMessage(state.mockMode ? "Starting mock mode..." : "Loading saved preferences...");
+      await loadHaloStorage({ quiet: true, skipReload: true });
+      setLoadingMessage("Loading Halo agents...");
       await loadHaloTechnicians({ quiet: true, skipAppointments: true });
       setLoadingMessage("Loading ticket types...");
       await loadHaloTicketTypes();
-      setLoadingMessage("Loading saved preferences...");
-      await loadHaloStorage({ quiet: true, skipReload: true });
       setLoadingMessage("Loading service tickets...");
       await loadHaloTickets({ quiet: true });
       setLoadingMessage("Loading calendars...");
@@ -391,7 +391,7 @@ const technicians = [
         currentAgentId: state.currentAgentId
       };
       Object.assign(state, preferences, keepConnection);
-      ensureSelectedTechnicians();
+      if (technicians.length) ensureSelectedTechnicians();
       $("colorBySelect").value = state.colorBy;
       $("show24HoursCheck").checked = state.show24Hours;
       $("calendarStartTime").value = state.calendarStartTime;
