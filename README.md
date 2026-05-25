@@ -53,7 +53,10 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    ```powershell
    wrangler secret put HALO_CLIENT_ID
    wrangler secret put HALO_CLIENT_SECRET
+   wrangler secret put HALO_REPORT_BEARER_TOKEN
    ```
+
+   `HALO_REPORT_BEARER_TOKEN` is the bearer token from the published Halo reports used for user preferences and saved filters.
 
 6. Deploy:
 

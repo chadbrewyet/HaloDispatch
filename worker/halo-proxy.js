@@ -506,7 +506,10 @@ async function loadStorageReport(env, key, fallbackId) {
   const reportId = storageReportId(env, key, fallbackId);
   if (!reportId) return { rows: [], meta: { skipped: true } };
   try {
-    const response = await haloRequest(env, `/api/ReportData/${encodeURIComponent(reportId)}`, { method: "GET" });
+    const response = await haloRequest(env, `/api/ReportData/${encodeURIComponent(reportId)}`, {
+      method: "GET",
+      bearerToken: env.HALO_REPORT_BEARER_TOKEN
+    });
     const rows = normalizeReportRows(response.data);
     return {
       rows,
@@ -1590,7 +1593,7 @@ function compactObject(value) {
 }
 
 async function haloRequest(env, path, options = {}) {
-  const accessToken = await getAccessToken(env);
+  const accessToken = options.bearerToken || await getAccessToken(env);
   const response = await fetch(new URL(path, env.HALO_RESOURCE_SERVER).toString(), {
     method: options.method || "GET",
     headers: {

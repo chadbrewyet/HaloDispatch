@@ -5,6 +5,7 @@ compatibility_date = "2026-05-18"
 # Set these as encrypted Cloudflare Worker secrets:
 # wrangler secret put HALO_CLIENT_ID
 # wrangler secret put HALO_CLIENT_SECRET
+# wrangler secret put HALO_REPORT_BEARER_TOKEN
 
 [vars]
 # Copy these values from HaloPSA > Configuration > Integrations > HaloPSA API > API Details.
