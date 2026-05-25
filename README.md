@@ -117,8 +117,8 @@ The app can now sync local browser settings to Halo custom tables through the Wo
 
 Current read reports:
 
-- User preferences published report ID: `267cb7b5-35de-48e6-baf8-936feaf90949`
-- Saved filters published report ID: `7ff3826a-f693-43dd-a7dc-333acf2d0a63`
+- User preferences published report ID: `7ff3826a-f693-43dd-a7dc-333acf2d0a63`
+- Saved filters published report ID: `267cb7b5-35de-48e6-baf8-936feaf90949`
 
 ### DispatchBoardUserPreferences
 
