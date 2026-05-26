@@ -287,11 +287,18 @@ const technicians = [
         if (saved.theme) {
           state.theme = saved.theme;
         }
-        if (Array.isArray(saved.reportLists) && saved.reportLists.length) state.reportLists = saved.reportLists;
+        if (Array.isArray(saved.ticketLists) && saved.ticketLists.length) {
+          applyTicketListPayload(saved.ticketLists);
+        } else if (Array.isArray(saved.reportLists) && saved.reportLists.length) {
+          state.reportLists = saved.reportLists;
+        }
         if (saved.orientation === "vertical" || saved.orientation === "horizontal") state.orientation = saved.orientation;
-        if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
-        if (saved.collapsedLists) state.collapsedLists = saved.collapsedLists;
-        if (saved.listFilters) state.listFilters = saved.listFilters;
+        if (!Array.isArray(saved.ticketLists) || !saved.ticketLists.length) {
+          if (saved.listViews) state.listViews = { ...state.listViews, ...saved.listViews };
+          if (saved.collapsedLists) state.collapsedLists = saved.collapsedLists;
+          if (saved.listFilters) state.listFilters = saved.listFilters;
+        }
+        normalizeTicketListState();
         if (saved.savedFilters) state.savedFilters = saved.savedFilters;
         if (saved.selectedListFilterFields) state.selectedListFilterFields = saved.selectedListFilterFields;
         if (saved.techThemes) state.techThemes = saved.techThemes;
@@ -330,6 +337,7 @@ const technicians = [
         calendarEndTime: state.calendarEndTime,
         theme: state.theme,
         orientation: state.orientation,
+        ticketLists: ticketListPayload(),
         reportLists: state.reportLists,
         listViews: state.listViews,
         collapsedLists: state.collapsedLists,
@@ -364,6 +372,7 @@ const technicians = [
         calendarEndTime: state.calendarEndTime,
         theme: state.theme,
         orientation: state.orientation,
+        ticketLists: ticketListPayload(),
         reportLists: state.reportLists,
         listViews: state.listViews,
         collapsedLists: state.collapsedLists,
@@ -383,6 +392,48 @@ const technicians = [
       };
     }
 
+    function ticketListPayload() {
+      normalizeTicketListState();
+      return state.reportLists.slice(0, 5).map((reportId, index) => {
+        const key = sectionKey(index);
+        return {
+          reportId,
+          view: state.listViews[key] || "card",
+          collapsed: Boolean(state.collapsedLists[key]),
+          filter: normalizeFilterShape(ensureListFilter(key))
+        };
+      });
+    }
+
+    function applyTicketListPayload(ticketLists = []) {
+      const lists = ticketLists.slice(0, 5);
+      state.reportLists = lists.map(list => list.reportId || "api-open");
+      state.listViews = {};
+      state.collapsedLists = {};
+      state.listFilters = {};
+      lists.forEach((list, index) => {
+        const key = sectionKey(index);
+        state.listViews[key] = list.view || "card";
+        state.collapsedLists[key] = Boolean(list.collapsed);
+        state.listFilters[key] = normalizeFilterShape(list.filter || {});
+      });
+      normalizeTicketListState();
+    }
+
+    function normalizeTicketListState() {
+      if (!Array.isArray(state.reportLists)) state.reportLists = [];
+      const filterIndexes = Object.keys(state.listFilters || {})
+        .map(key => Number((key.match(/^report-(\d+)$/) || [])[1]))
+        .filter(index => Number.isInteger(index) && index >= 0);
+      const requiredLength = Math.min(5, Math.max(1, state.reportLists.length, filterIndexes.length ? Math.max(...filterIndexes) + 1 : 0));
+      while (state.reportLists.length < requiredLength) state.reportLists.push("api-open");
+      state.reportLists = state.reportLists.slice(0, 5);
+      state.reportLists.forEach((reportId, index) => {
+        const key = sectionKey(index);
+        if (!state.listFilters[key]) state.listFilters[key] = normalizeFilterShape({});
+      });
+    }
+
     function applyDispatchPreferencePayload(preferences = {}) {
       const keepConnection = {
         apiBaseUrl: state.apiBaseUrl,
@@ -391,6 +442,11 @@ const technicians = [
         currentAgentId: state.currentAgentId
       };
       Object.assign(state, preferences, keepConnection);
+      if (Array.isArray(preferences.ticketLists) && preferences.ticketLists.length) {
+        applyTicketListPayload(preferences.ticketLists);
+      } else {
+        normalizeTicketListState();
+      }
       if (technicians.length) ensureSelectedTechnicians();
       $("colorBySelect").value = state.colorBy;
       $("show24HoursCheck").checked = state.show24Hours;

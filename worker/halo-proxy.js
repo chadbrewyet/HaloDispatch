@@ -689,7 +689,6 @@ async function handleDispatchSavedFilterDelete(payload, env) {
   const table = await loadCustomTable(env, tableId);
   const fields = storageFields(env, table.fields);
   const existing = table.rows.find(row => String(readRowValue(row, fields.filterName)).toLowerCase() === name.toLowerCase());
-  if (!existing) return { ok: true, mode: "not-found", message: "Saved filter was not present in Halo storage." };
 
   const row = {
     [fields.filterName[0]]: name,
