@@ -505,8 +505,14 @@ async function loadHolidaysForAgents(env, date, agentIds) {
 }
 
 function holidayRecordKey(record, queriedAgentId = "") {
-  const id = record?.holid ?? record?.id ?? record?.guid ?? JSON.stringify(record);
   const agentId = record?.agent_id ?? record?.agentid ?? queriedAgentId ?? "";
+  if (!agentId || String(agentId) === "0" || String(agentId) === "workdays") {
+    const name = String(record?.name || record?.holiday_type_name || "").toLowerCase();
+    const start = customDatePart(record?.date_datetime || record?.date || record?.date_only || "");
+    const end = customDatePart(record?.end_date || record?.end_date_only || start);
+    if (name && start) return `global:${name}:${start}:${end}`;
+  }
+  const id = record?.holid ?? record?.id ?? record?.guid ?? JSON.stringify(record);
   return `${id}:${agentId}`;
 }
 
