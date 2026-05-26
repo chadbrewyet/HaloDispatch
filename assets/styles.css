@@ -1462,6 +1462,11 @@
       outline-offset: -2px;
     }
 
+    .time-slot.availability-blocked {
+      background: #ffe2e2;
+      box-shadow: inset 4px 0 0 #d94b4b;
+    }
+
     .appointment {
       position: relative;
       width: 100%;
@@ -1507,6 +1512,13 @@
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
+    }
+
+    .color-availability-block {
+      border-color: #b83f3f;
+      border-left-color: #b83f3f;
+      background: #ffd6d6;
+      color: #5b1717;
     }
 
     .color-p1 {
@@ -1662,6 +1674,18 @@
     body[data-theme="dark"] .drop-zone.over,
     body[data-theme="dark"] .time-slot.over {
       background: #17384a;
+    }
+
+    body[data-theme="dark"] .time-slot.availability-blocked {
+      background: #3a1719;
+      box-shadow: inset 4px 0 0 #f06a6a;
+    }
+
+    body[data-theme="dark"] .color-availability-block {
+      border-color: #f06a6a;
+      border-left-color: #f06a6a;
+      background: #4a1e22;
+      color: #ffe7e7;
     }
 
     body[data-theme="dark"] .current-time-marker {

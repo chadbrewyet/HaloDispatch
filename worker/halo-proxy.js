@@ -347,16 +347,35 @@ async function handleAppointmentLoad(payload, env) {
 
 async function loadAppointmentsWithFallbacks(env, date, agentIds) {
   const variants = appointmentQueryVariants(date, agentIds);
-  let bestResult = { records: [], meta: { firstPath: "", pages: 0, variant: "" } };
+  const merged = [];
+  const seen = new Set();
+  const summaries = [];
 
   for (const variant of variants) {
     const result = await haloGetAllPages(env, "/api/Appointment", variant.params);
     result.meta.variant = variant.name;
-    if (!bestResult.records.length) bestResult = result;
-    if (result.records.length) return result;
+    summaries.push({ variant: variant.name, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
+    result.records.forEach(record => {
+      const key = appointmentRecordKey(record);
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push(record);
+    });
   }
 
-  return bestResult;
+  return {
+    records: merged,
+    meta: {
+      firstPath: summaries.find(summary => summary.firstPath)?.firstPath || "",
+      pages: summaries.reduce((total, summary) => total + (summary.pages || 0), 0),
+      variant: "merged",
+      variants: summaries
+    }
+  };
+}
+
+function appointmentRecordKey(record) {
+  return String(record?.id ?? record?.appointment_id ?? record?.apptid ?? record?.guid ?? JSON.stringify(record));
 }
 
 function appointmentQueryVariants(date, agentIds) {
@@ -816,6 +835,9 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   if (!displayId) return [];
 
   let agentIds = appointmentAgentIds(appointment).filter(agentId => allowedAgentIds.includes(agentId));
+  const title = appointment.subject || appointment.note || appointment.appointment_type_name || appointment.type_name || appointment.appointmenttype_name || `Appointment #${displayId}`;
+  const availabilityBlock = isAvailabilityBlock(appointment, title);
+  if (!agentIds.length && availabilityBlock && allowedAgentIds.length) agentIds = allowedAgentIds;
   if (!agentIds.length && allowedAgentIds.length === 1) agentIds = allowedAgentIds;
   if (!agentIds.length) return [];
 
@@ -825,8 +847,8 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const startTime = timePart(startDate, env) || "00:00";
   const duration = allDay ? 1440 : durationMinutes(startDate, endDate);
   const kind = allDay ? "allDay" : "timed";
-  const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
   const completed = isCompletedAppointment(appointment);
+  const displayDate = appointmentDisplayDate(startDate, endDate, date, env);
 
   return agentIds.map(agentId => ({
     appointmentId: String(appointment.id || appointment.appointment_id || ""),
@@ -836,11 +858,41 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
     kind,
     time: kind === "timed" ? startTime : undefined,
     duration,
-    date: datePart(startDate, env) || date,
+    date: displayDate,
     label: stripHtml(title),
     completed,
+    availabilityBlock,
     source: "haloAppointment"
   }));
+}
+
+function appointmentDisplayDate(startDate, endDate, selectedDate, env) {
+  const start = datePart(startDate, env);
+  const end = datePart(endDate, env) || start;
+  if (start && end && start <= selectedDate && selectedDate <= end) return selectedDate;
+  return start || selectedDate;
+}
+
+function isAvailabilityBlock(appointment, title = "") {
+  const values = [
+    title,
+    appointment.appointment_type_name,
+    appointment.appointmenttype_name,
+    appointment.type_name,
+    appointment.type,
+    appointment.status,
+    appointment.note,
+    appointment.subject
+  ].map(value => String(value || "").toLowerCase());
+  return values.some(value => {
+    return value.includes("holiday")
+      || value.includes("pto")
+      || value.includes("paid time off")
+      || value.includes("vacation")
+      || value.includes("out of office")
+      || value.includes("out-of-office")
+      || value.includes("sick");
+  });
 }
 
 function isCompletedAppointment(appointment) {
