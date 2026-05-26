@@ -1789,7 +1789,7 @@ const technicians = [
     function renderBoard() {
       captureCalendarScroll();
       const board = $("dispatchBoard");
-      board.parentElement.className = `board-wrap ${state.orientation}`;
+      board.parentElement.className = `board-wrap ${state.orientation} ${isCalendarLoading() ? "is-loading" : ""}`;
       board.className = `board ${state.orientation}`;
       const selectedTechs = state.selectedTechs.map(id => technicians.find(tech => tech.id === id)).filter(Boolean);
       board.innerHTML = selectedTechs.map(renderTechColumn).join("");
@@ -1818,7 +1818,6 @@ const technicians = [
       const pastCollapsed = state.collapsedTechGroups[pastKey] !== false;
       const techStyle = `style="--tech-color:${escapeHtml(techThemeColor(tech.id))};"`;
       const workload = techWorkloadSummary(tech, timed, allDay);
-      const calendarLoading = isCalendarLoading();
       if (state.orientation === "vertical") {
         return `
           <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
@@ -1839,10 +1838,9 @@ const technicians = [
               ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
             </div>
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
-              <div class="calendar ${calendarLoading ? "is-loading" : ""}" data-calendar-tech-id="${tech.id}">
+              <div class="calendar" data-calendar-tech-id="${tech.id}">
                 <div class="time-axis">${renderTimeLabels()}</div>
                 <div class="slot-grid">${renderTimeSlots(tech.id, timed, allDayBlocked)}</div>
-                ${renderCalendarLoadingOverlay(calendarLoading)}
               </div>
             `}
           </section>
@@ -1861,10 +1859,9 @@ const technicians = [
           ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Calendar")}
           ${scheduleCollapsed ? "" : `
             ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
-            <div class="calendar ${calendarLoading ? "is-loading" : ""}" data-calendar-tech-id="${tech.id}">
+            <div class="calendar" data-calendar-tech-id="${tech.id}">
               <div class="time-axis">${renderTimeLabels()}</div>
               <div class="slot-grid">${renderTimeSlots(tech.id, timed, allDayBlocked)}</div>
-              ${renderCalendarLoadingOverlay(calendarLoading)}
             </div>
           `}
           ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
@@ -1872,16 +1869,6 @@ const technicians = [
           ${pastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", pastNoTime.length, "alert") : ""}
           ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
         </section>
-      `;
-    }
-
-    function renderCalendarLoadingOverlay(isLoading) {
-      if (!isLoading) return "";
-      return `
-        <div class="calendar-loading-overlay" aria-live="polite" aria-label="Loading calendar">
-          <span class="calendar-spinner"></span>
-          <span>Loading calendar</span>
-        </div>
       `;
     }
 

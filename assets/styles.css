@@ -980,6 +980,7 @@
       min-height: 0;
       padding: 8px;
       background: var(--calendar-band);
+      position: relative;
     }
 
     .board-wrap.horizontal {
@@ -1410,16 +1411,11 @@
       min-width: 0;
     }
 
-    .calendar.is-loading .time-axis,
-    .calendar.is-loading .slot-grid {
-      opacity: 0.38;
-    }
-
-    .calendar-loading-overlay {
+    .board-loading-overlay {
       position: absolute;
-      inset: 0;
-      z-index: 18;
-      display: flex;
+      inset: 8px;
+      z-index: 40;
+      display: none;
       align-items: center;
       justify-content: center;
       gap: 10px;
@@ -1427,7 +1423,17 @@
       font-weight: 800;
       background: color-mix(in srgb, var(--panel) 72%, transparent);
       backdrop-filter: blur(2px);
+      border: 1px solid color-mix(in srgb, var(--accent) 28%, var(--line));
+      border-radius: 8px;
       pointer-events: none;
+    }
+
+    .board-wrap.is-loading .board {
+      filter: grayscale(0.2);
+    }
+
+    .board-wrap.is-loading .board-loading-overlay {
+      display: flex;
     }
 
     .calendar-spinner {
