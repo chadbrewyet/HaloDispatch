@@ -472,6 +472,28 @@ async function loadHolidaysForAgents(env, date, agentIds) {
     });
   }
 
+  const workdayResult = await haloGetAllPages(env, "/api/Workday", new URLSearchParams({
+    showholidays: "true",
+    count: String(DEFAULT_PAGE_SIZE)
+  }));
+  queries.push({ agentId: "workdays", count: workdayResult.records.length, firstPath: workdayResult.meta.firstPath, pages: workdayResult.meta.pages });
+  workdayResult.records
+    .flatMap(workday => {
+      const holidays = Array.isArray(workday.holidays) ? workday.holidays : [];
+      return holidays.map(holiday => ({
+        ...holiday,
+        workday_id: holiday.workday_id ?? workday.id,
+        workday_name: workday.name
+      }));
+    })
+    .filter(holiday => holidayOverlapsDate(holiday, date, env))
+    .forEach(record => {
+      const key = holidayRecordKey(record, "workdays");
+      if (seen.has(key)) return;
+      seen.add(key);
+      merged.push(record);
+    });
+
   return {
     records: merged,
     meta: {
@@ -486,6 +508,15 @@ function holidayRecordKey(record, queriedAgentId = "") {
   const id = record?.holid ?? record?.id ?? record?.guid ?? JSON.stringify(record);
   const agentId = record?.agent_id ?? record?.agentid ?? queriedAgentId ?? "";
   return `${id}:${agentId}`;
+}
+
+function holidayOverlapsDate(holiday, date, env) {
+  const startDate = holiday.date_datetime || holiday.date || holiday.date_only || "";
+  if (!startDate) return false;
+  const endDate = holiday.end_date || holiday.end_date_only || startDate;
+  const start = datePart(startDate, env);
+  const end = datePart(endDate, env) || start;
+  return Boolean(start && end && start <= date && date <= end);
 }
 
 async function handleDateOnlyTaskLoad(payload, env) {
@@ -945,7 +976,7 @@ function normalizeHoliday(holiday, date, allowedAgentIds, env) {
   const startTime = timePart(startDate, env) || "00:00";
   const duration = allDay ? 1440 : durationMinutes(startDate, endDate);
   const kind = allDay ? "allDay" : "timed";
-  const label = holiday.name || holiday.holiday_type_name || holiday.agent_name || "Holiday / PTO";
+  const label = holiday.name || holiday.holiday_type_name || holiday.workday_name || holiday.agent_name || "Holiday / PTO";
   const displayDate = appointmentDisplayDate(startDate, endDate, date, env);
 
   return agentIds.map(agentId => ({
@@ -1011,6 +1042,8 @@ function summarizeRawHoliday(holiday) {
     id: holiday.id,
     holid: holiday.holid,
     name: holiday.name,
+    workday_name: holiday.workday_name,
+    workday_id: holiday.workday_id,
     agent_id: holiday.agent_id,
     agent_name: holiday.agent_name,
     date: holiday.date,
