@@ -303,7 +303,7 @@ function normalizeTicket(ticket, env) {
     serviceZone: stripHtml(serviceZone || ticket.service_zone || ticket.servicezone || ""),
     details: stripHtml(ticket.details || ticket.detail || ticket.lastnote || ticket.last_note || ""),
     dateField: customDate,
-    dateOpened: datePart(ticket.dateoccured || ticket.date_occurred || ticket.dateopened || ticket.date_opened || ticket.datecreated || ticket.date_created, env) || "",
+    dateOpened: datePart(ticket.dateoccurred || ticket.dateoccured || ticket.date_occurred || ticket.dateopened || ticket.date_opened || ticket.datecreated || ticket.date_created, env) || "",
     assignedTo: ticket.agent_id ? String(ticket.agent_id) : "",
     completed: isCompletedTicket(ticket)
   };
