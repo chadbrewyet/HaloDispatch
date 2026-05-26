@@ -364,6 +364,8 @@ function appointmentQueryVariants(date, agentIds) {
     agents: agentIds.join(","),
     showall: "true",
     showappointments: "true",
+    showholidays: "true",
+    appointmentsonly: "false",
     excluderecurringmaster: "true",
     count: String(DEFAULT_PAGE_SIZE)
   };
@@ -812,7 +814,9 @@ function isCompletedTicket(ticket) {
 
 function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const ticketId = appointment.ticket_id ?? appointment.faultid ?? appointment.fault_id ?? appointment.apfaultid;
-  const displayId = ticketId ?? appointment.id ?? appointment.appointment_id;
+  const holidayId = appointment.holiday_id ?? appointment.holidayid;
+  const appointmentId = holidayId ? `holiday:${holidayId}:${appointment.agent_id ?? appointment.agentid ?? ""}` : String(appointment.id || appointment.appointment_id || "");
+  const displayId = ticketId ?? (holidayId ? syntheticCalendarId(appointmentId) : (appointment.id ?? appointment.appointment_id));
   if (!displayId) return [];
 
   let agentIds = appointmentAgentIds(appointment).filter(agentId => allowedAgentIds.includes(agentId));
@@ -827,9 +831,10 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const kind = allDay ? "allDay" : "timed";
   const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
   const completed = isCompletedAppointment(appointment);
+  const availabilityBlock = Boolean(holidayId);
 
   return agentIds.map(agentId => ({
-    appointmentId: String(appointment.id || appointment.appointment_id || ""),
+    appointmentId,
     ticketId: Number(displayId),
     haloTicketId: ticketId ? Number(ticketId) : null,
     techId: agentId,
@@ -839,8 +844,19 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
     date: datePart(startDate, env) || date,
     label: stripHtml(title),
     completed,
+    availabilityBlock,
     source: "haloAppointment"
   }));
+}
+
+function syntheticCalendarId(value) {
+  const input = String(value || "calendar");
+  let hash = 0;
+  for (let index = 0; index < input.length; index += 1) {
+    hash = ((hash << 5) - hash) + input.charCodeAt(index);
+    hash |= 0;
+  }
+  return -Math.abs(hash || 1);
 }
 
 function isCompletedAppointment(appointment) {

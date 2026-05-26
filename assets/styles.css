@@ -1462,6 +1462,11 @@
       outline-offset: -2px;
     }
 
+    .time-slot.availability-blocked {
+      background: #ffe2e2;
+      box-shadow: inset 4px 0 0 #d94b4b;
+    }
+
     .appointment {
       position: relative;
       width: 100%;
@@ -1569,6 +1574,13 @@
       background: #e7f7fa;
     }
 
+    .color-availability-block {
+      border-color: #b83f3f;
+      border-left-color: #b83f3f;
+      background: #ffd6d6;
+      color: #5b1717;
+    }
+
     .color-completed {
       border-color: #9aa4aa;
       border-left-color: #77838a;
@@ -1643,6 +1655,18 @@
       border-color: #7fd6df;
       border-left-color: #7fd6df;
       background: linear-gradient(90deg, rgba(127, 214, 223, 0.22), rgba(127, 214, 223, 0.08)), #1b252d;
+    }
+
+    body[data-theme="dark"] .time-slot.availability-blocked {
+      background: #3a1719;
+      box-shadow: inset 4px 0 0 #f06a6a;
+    }
+
+    body[data-theme="dark"] .color-availability-block {
+      border-color: #f06a6a;
+      border-left-color: #f06a6a;
+      background: #4a1e22;
+      color: #ffe7e7;
     }
 
     body[data-theme="dark"] .color-completed {
