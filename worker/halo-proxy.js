@@ -323,6 +323,7 @@ async function handleAppointmentLoad(payload, env) {
 
   const appointments = rawAppointments
     .flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
+    .filter(appointment => appointment.date === date)
     .filter(Boolean);
   debugLog(env, "loadAppointments response", {
     date,
@@ -340,23 +341,47 @@ async function handleAppointmentLoad(payload, env) {
       haloPath: meta.firstPath,
       rawCount: rawAppointments.length,
       normalizedCount: appointments.length,
-      pages: meta.pages
+      pages: meta.pages,
+      variant: meta.variant,
+      variants: meta.variants,
+      rawSample: payload.debug ? rawAppointments.slice(0, 10).map(summarizeRawAppointment) : undefined
     }
   };
 }
 
 async function loadAppointmentsWithFallbacks(env, date, agentIds) {
   const variants = appointmentQueryVariants(date, agentIds);
-  let bestResult = { records: [], meta: { firstPath: "", pages: 0, variant: "" } };
+  const records = [];
+  const seen = new Set();
+  const summaries = [];
 
   for (const variant of variants) {
     const result = await haloGetAllPages(env, "/api/Appointment", variant.params);
     result.meta.variant = variant.name;
-    if (!bestResult.records.length) bestResult = result;
-    if (result.records.length) return result;
+    summaries.push({ variant: variant.name, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
+    result.records.forEach(record => {
+      const key = appointmentRecordKey(record);
+      if (seen.has(key)) return;
+      seen.add(key);
+      records.push(record);
+    });
   }
 
-  return bestResult;
+  return {
+    records,
+    meta: {
+      firstPath: summaries.find(summary => summary.firstPath)?.firstPath || "",
+      pages: summaries.reduce((total, summary) => total + (summary.pages || 0), 0),
+      variant: "merged",
+      variants: summaries
+    }
+  };
+}
+
+function appointmentRecordKey(record) {
+  return String(record?.holiday_id
+    ? `holiday:${record.holiday_id}:${record.agent_id ?? record.agentid ?? ""}`
+    : (record?.id ?? record?.appointment_id ?? record?.apptid ?? record?.guid ?? JSON.stringify(record)));
 }
 
 function appointmentQueryVariants(date, agentIds) {
@@ -371,17 +396,41 @@ function appointmentQueryVariants(date, agentIds) {
   };
   return [
     {
-      name: "holiday-date-start-only",
+      name: "holiday-date-range",
       params: new URLSearchParams({
-        ...common,
-        start_date: date
+        agents: agentIds.join(","),
+        showall: "true",
+        showholidays: "true",
+        appointmentsonly: "false",
+        excluderecurringmaster: "true",
+        count: String(DEFAULT_PAGE_SIZE),
+        start_date: date,
+        end_date: date
       })
     },
     {
-      name: "holiday-datetime-start-only",
+      name: "holiday-datetime-range",
       params: new URLSearchParams({
-        ...common,
-        start_date: `${date}T00:00:00`
+        agents: agentIds.join(","),
+        showall: "true",
+        showholidays: "true",
+        appointmentsonly: "false",
+        excluderecurringmaster: "true",
+        count: String(DEFAULT_PAGE_SIZE),
+        start_date: `${date}T00:00:00`,
+        end_date: `${date}T23:59:59`
+      })
+    },
+    {
+      name: "holiday-date-start-only",
+      params: new URLSearchParams({
+        agents: agentIds.join(","),
+        showall: "true",
+        showholidays: "true",
+        appointmentsonly: "false",
+        excluderecurringmaster: "true",
+        count: String(DEFAULT_PAGE_SIZE),
+        start_date: date
       })
     },
     {
@@ -871,6 +920,20 @@ function syntheticCalendarId(value) {
     hash |= 0;
   }
   return -Math.abs(hash || 1);
+}
+
+function summarizeRawAppointment(appointment) {
+  return {
+    id: appointment.id,
+    appointment_id: appointment.appointment_id,
+    holiday_id: appointment.holiday_id,
+    subject: appointment.subject,
+    appointment_type_name: appointment.appointment_type_name,
+    agent_id: appointment.agent_id,
+    start: appointmentDateValue(appointment, "start"),
+    end: appointmentDateValue(appointment, "end"),
+    allday: appointment.allday ?? appointment.all_day ?? appointment.isallday ?? appointment.is_all_day
+  };
 }
 
 function isCompletedAppointment(appointment) {
