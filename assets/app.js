@@ -1084,12 +1084,28 @@ const technicians = [
     }
 
     function defaultCondition() {
-      const field = state.selectedListFilterFields[0] || "assignedTo";
+      const field = availableFilterFieldOptions()[0]?.key || "assignedTo";
       return { joiner: "and", mode: "include", field, operator: defaultOperatorForField(field), values: [], value: "", valueEnd: "" };
     }
 
     function filterFieldConfig(field) {
       return listFilterFieldOptions.find(item => item.key === field) || { key: field, label: field, type: "category" };
+    }
+
+    function availableFilterFieldOptions(currentField = "") {
+      const selected = state.selectedListFilterFields.length ? state.selectedListFilterFields : listFilterFieldOptions.map(field => field.key);
+      const allowed = new Set(selected);
+      if (currentField) allowed.add(currentField);
+      return listFilterFieldOptions.filter(field => allowed.has(field.key));
+    }
+
+    function visibleFilterPickerFields(filter) {
+      const fields = new Set(state.selectedListFilterFields);
+      filterConditions(filter).forEach(condition => {
+        if (condition.field) fields.add(condition.field);
+      });
+      Object.keys(filter.values || {}).forEach(field => fields.add(field));
+      return Array.from(fields);
     }
 
     function filterFieldType(field) {
@@ -1262,7 +1278,7 @@ const technicians = [
             <option value="">Apply saved filter</option>
             ${names.map(name => `<option value="${escapeHtml(name)}">${escapeHtml(name)}</option>`).join("")}
           </select>
-          ${state.selectedListFilterFields.map(field => renderFilterFieldPicker(key, field)).join("")}
+          ${visibleFilterPickerFields(filter).map(field => renderFilterFieldPicker(key, field)).join("")}
         </div>
       `;
     }
@@ -1303,7 +1319,7 @@ const technicians = [
 
     function renderFilterConditionRow(condition, index) {
       const fieldType = filterFieldType(condition.field);
-      const fieldOptions = listFilterFieldOptions.map(field => `<option value="${field.key}" ${field.key === condition.field ? "selected" : ""}>${escapeHtml(field.label)}</option>`).join("");
+      const fieldOptions = availableFilterFieldOptions(condition.field).map(field => `<option value="${field.key}" ${field.key === condition.field ? "selected" : ""}>${escapeHtml(field.label)}</option>`).join("");
       return `
         <div class="filter-condition-row" data-condition-index="${index}">
           ${index > 0 ? `
