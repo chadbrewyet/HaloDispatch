@@ -63,6 +63,10 @@ const technicians = [
       ticketRefreshMinutes: 2,
       ticketRefreshTimer: null,
       currentTimeTimer: null,
+      appointmentCache: {},
+      appointmentCacheTtlMs: 120000,
+      appointmentPrefetchDays: 2,
+      prefetchingAppointments: false,
       haloStorageLoaded: false,
       haloStorageSaveTimer: null,
       loadingHaloStorage: false,
@@ -1811,7 +1815,7 @@ const technicians = [
       const noTimeCollapsed = Boolean(state.collapsedTechGroups[noTimeKey]);
       const pastCollapsed = state.collapsedTechGroups[pastKey] !== false;
       const techStyle = `style="--tech-color:${escapeHtml(techThemeColor(tech.id))};"`;
-      const workload = techWorkloadSummary(timed);
+      const workload = techWorkloadSummary(tech, timed, allDay);
       if (state.orientation === "vertical") {
         return `
           <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
@@ -1926,11 +1930,32 @@ const technicians = [
       return /^#[0-9a-f]{6}$/i.test(color || "") ? color : "#273946";
     }
 
-    function techWorkloadSummary(timedItems) {
+    function techWorkloadSummary(tech, timedItems, allDayItems = []) {
       const assignedMinutes = timedItems.reduce((total, item) => total + Number(item.duration || 30), 0);
-      const availableMinutes = Math.max(30, calendarEndMinutes() - calendarStartMinutes());
+      const availableMinutes = techAvailableMinutes(tech, allDayItems);
+      if (availableMinutes <= 0) return `${formatDurationShort(assignedMinutes)} / 0m off`;
       const percent = Math.round((assignedMinutes / availableMinutes) * 100);
       return `${formatDurationShort(assignedMinutes)} / ${formatDurationShort(availableMinutes)} ${percent}%`;
+    }
+
+    function techAvailableMinutes(tech, allDayItems = []) {
+      if (allDayItems.some(item => item.availabilityBlock)) return 0;
+      const workdayMinutes = workdayMinutesForDate(tech?.workday, selectedDate());
+      if (workdayMinutes !== null) return workdayMinutes;
+      return Math.max(30, calendarEndMinutes() - calendarStartMinutes());
+    }
+
+    function workdayMinutesForDate(workday, dateValue) {
+      if (!workday?.weekly) return null;
+      const date = new Date(`${dateValue}T00:00:00`);
+      if (!Number.isFinite(date.getTime())) return null;
+      const dayKeys = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
+      const day = workday.weekly[dayKeys[date.getDay()]];
+      if (!day) return null;
+      if (day.enabled === false) return 0;
+      const start = timeToMinutes(day.start || "");
+      const end = timeToMinutes(day.end || "");
+      return end > start ? end - start : 0;
     }
 
     function formatDurationShort(minutes) {
@@ -2845,19 +2870,85 @@ const technicians = [
 
     async function loadHaloAppointments(options = {}) {
       if (!effectiveWorkerUrl() || !state.selectedTechs.length) return;
+      const date = options.date || selectedDate();
+      const cached = appointmentCacheEntry(date);
+      if (cached && !options.force) {
+        if (options.apply !== false) {
+          syncHaloAppointments(cached.appointments, date);
+          if (date === selectedDate()) {
+            loadHaloDateOnlyTasks({ quiet: true });
+            renderBoard();
+          }
+        }
+        if (!options.skipPrefetch) prefetchAdjacentAppointments(date);
+        return;
+      }
       const result = await callHalo("loadAppointments", {
-        date: selectedDate(),
+        date,
         technicianIds: state.selectedTechs
       }, { quiet: true });
       debugLog("HaloPSA appointment load result", result?.meta || result);
       if (!result?.ok) return;
-      syncHaloAppointments(result.data?.appointments || []);
-      loadHaloDateOnlyTasks({ quiet: true });
-      renderBoard();
+      const appointments = result.data?.appointments || [];
+      setAppointmentCacheEntry(date, appointments);
+      if (options.apply !== false) {
+        syncHaloAppointments(appointments, date);
+        if (date === selectedDate()) {
+          loadHaloDateOnlyTasks({ quiet: true });
+          renderBoard();
+        }
+      }
+      if (!options.skipPrefetch) prefetchAdjacentAppointments(date);
       debugLog("HaloPSA board appointment sync", appointmentVisibilitySummary(result.data?.appointments || []));
       if (!options.quiet && result.data?.appointments?.length) {
         toast("Halo appointments loaded", `${result.data.appointments.length} calendar items matched this view.`);
       }
+    }
+
+    function appointmentCacheKey(date = selectedDate()) {
+      return `${date}|${state.selectedTechs.map(String).sort().join(",")}`;
+    }
+
+    function appointmentCacheEntry(date = selectedDate()) {
+      const entry = state.appointmentCache[appointmentCacheKey(date)];
+      if (!entry) return null;
+      if (Date.now() - entry.loadedAt > state.appointmentCacheTtlMs) return null;
+      return entry;
+    }
+
+    function setAppointmentCacheEntry(date, appointments) {
+      state.appointmentCache[appointmentCacheKey(date)] = {
+        loadedAt: Date.now(),
+        appointments: structuredClone(appointments || [])
+      };
+      pruneAppointmentCache();
+    }
+
+    function pruneAppointmentCache() {
+      const keys = Object.keys(state.appointmentCache);
+      if (keys.length <= 30) return;
+      keys
+        .sort((a, b) => (state.appointmentCache[a]?.loadedAt || 0) - (state.appointmentCache[b]?.loadedAt || 0))
+        .slice(0, keys.length - 30)
+        .forEach(key => delete state.appointmentCache[key]);
+    }
+
+    function prefetchAdjacentAppointments(date = selectedDate()) {
+      if (!effectiveWorkerUrl() || !state.selectedTechs.length || state.prefetchingAppointments) return;
+      state.prefetchingAppointments = true;
+      const base = new Date(`${date}T00:00:00`);
+      const dates = [];
+      for (let offset = 1; offset <= state.appointmentPrefetchDays; offset += 1) {
+        dates.push(localDateKey(addDays(base, -offset)), localDateKey(addDays(base, offset)));
+      }
+      setTimeout(() => {
+        Promise.all(dates
+          .filter(day => !appointmentCacheEntry(day))
+          .map(day => loadHaloAppointments({ date: day, quiet: true, apply: false, skipPrefetch: true })))
+          .finally(() => {
+            state.prefetchingAppointments = false;
+          });
+      }, 100);
     }
 
     function resetAppointmentRefreshTimer() {
@@ -2909,10 +3000,10 @@ const technicians = [
       }
     }
 
-    function syncHaloAppointments(appointments) {
+    function syncHaloAppointments(appointments, date = selectedDate()) {
       const visibleTechs = new Set(state.selectedTechs);
       state.boardItems = state.boardItems.filter(item => {
-        const sameDate = isSelectedDate(item.date);
+        const sameDate = String(item.date || "") === date;
         const sameTech = visibleTechs.has(String(item.techId));
         return item.source !== "haloAppointment" || !sameDate || !sameTech;
       });
@@ -3012,7 +3103,9 @@ const technicians = [
         name: tech.name || `Technician ${tech.id}`,
         teamId: String(tech.teamId || ""),
         team: tech.team || `Team ${tech.teamId || ""}`,
-        teamIds: Array.isArray(tech.teamIds) && tech.teamIds.length ? tech.teamIds.map(String) : [String(tech.teamId || "")]
+        teamIds: Array.isArray(tech.teamIds) && tech.teamIds.length ? tech.teamIds.map(String) : [String(tech.teamId || "")],
+        workdayId: String(tech.workdayId || ""),
+        workday: tech.workday || null
       })));
 
       teams.splice(0, teams.length, ...data.teams.map(team => ({
@@ -3151,7 +3244,7 @@ const technicians = [
       }
       if (options.successTitle) toast(options.successTitle, options.successMessage || "");
       if (result?.ok) {
-        if (options.refreshAppointments) setTimeout(() => loadHaloAppointments({ quiet: true }), 800);
+        if (options.refreshAppointments) setTimeout(() => loadHaloAppointments({ quiet: true, force: true }), 800);
         if (options.refreshTickets) setTimeout(() => loadHaloTickets({ quiet: true }), 800);
       }
       return result;

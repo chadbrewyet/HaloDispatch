@@ -1016,6 +1016,8 @@ async function handleTechnicianLoad(payload, env) {
   const teamIds = new Set((payload.teamIds?.length ? payload.teamIds : configuredTeamIds).map(String));
   const response = await haloRequest(env, "/api/Agent", { method: "GET" });
   const agents = unwrapList(response.data);
+  const workdays = await loadWorkdays(env);
+  const workdayMap = new Map(workdays.map(workday => [String(workday.id), normalizeWorkday(workday)]));
   const teamMap = new Map();
 
   const technicians = agents
@@ -1038,12 +1040,15 @@ async function handleTechnicianLoad(payload, env) {
 
       const primaryTeam = matchingTeams[0];
       const primaryTeamId = String(primaryTeam.team_id ?? primaryTeam.id ?? "");
+      const workdayId = agentWorkdayId(agent);
       return {
         id: String(agent.id),
         name: agent.name || agent.display_name || agent.email || `Technician ${agent.id}`,
         teamId: primaryTeamId,
         team: teamMap.get(primaryTeamId)?.name || agent.team || `Team ${primaryTeamId}`,
-        teamIds: matchingTeams.map(team => String(team.team_id ?? team.id ?? "")).filter(Boolean)
+        teamIds: matchingTeams.map(team => String(team.team_id ?? team.id ?? "")).filter(Boolean),
+        workdayId,
+        workday: workdayId ? workdayMap.get(String(workdayId)) || null : null
       };
     })
     .filter(Boolean);
@@ -1055,6 +1060,53 @@ async function handleTechnicianLoad(payload, env) {
       teams: Array.from(teamMap.values()).sort((a, b) => Number(a.id) - Number(b.id))
     }
   };
+}
+
+async function loadWorkdays(env) {
+  try {
+    const response = await haloRequest(env, "/api/Workday?showholidays=false", { method: "GET" });
+    return unwrapList(response.data);
+  } catch (error) {
+    debugLog(env, "loadWorkdays failed", { error: error.message });
+    return [];
+  }
+}
+
+function agentWorkdayId(agent) {
+  const value = agent.workday_id
+    ?? agent.workdayid
+    ?? agent.workdayId
+    ?? agent.workday?.id
+    ?? agent.workday?.workday_id
+    ?? agent.workday;
+  if (value && typeof value === "object") return value.id ?? value.workday_id ?? "";
+  return value ? String(value) : "";
+}
+
+function normalizeWorkday(workday) {
+  const days = ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"];
+  const weekly = {};
+  days.forEach(day => {
+    const start = workdayTime(workday[`start${day}`] || workday.start);
+    const end = workdayTime(workday[`end${day}`] || workday.end);
+    const enabledFlag = workday[`inc${day}`] ?? workday[`include_${day}`] ?? workday[day];
+    weekly[day] = {
+      enabled: enabledFlag === undefined ? Boolean(start && end) : isTrue(enabledFlag),
+      start,
+      end
+    };
+  });
+  return {
+    id: String(workday.id || workday.workday_id || ""),
+    name: workday.name || workday.summary || `Workday ${workday.id || ""}`,
+    weekly
+  };
+}
+
+function workdayTime(value) {
+  const text = String(value || "");
+  const match = text.match(/[T\s](\d{1,2}:\d{2})/) || text.match(/^(\d{1,2}:\d{2})/);
+  return match ? match[1].padStart(5, "0") : "";
 }
 
 async function handleReportRefresh(payload, env) {
