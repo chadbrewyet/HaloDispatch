@@ -67,6 +67,7 @@ const technicians = [
       appointmentCacheTtlMs: 120000,
       appointmentPrefetchDays: 2,
       prefetchingAppointments: false,
+      calendarLoadingDates: {},
       haloStorageLoaded: false,
       haloStorageSaveTimer: null,
       loadingHaloStorage: false,
@@ -1817,6 +1818,7 @@ const technicians = [
       const pastCollapsed = state.collapsedTechGroups[pastKey] !== false;
       const techStyle = `style="--tech-color:${escapeHtml(techThemeColor(tech.id))};"`;
       const workload = techWorkloadSummary(tech, timed, allDay);
+      const calendarLoading = isCalendarLoading();
       if (state.orientation === "vertical") {
         return `
           <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
@@ -1837,9 +1839,10 @@ const technicians = [
               ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
             </div>
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
-              <div class="calendar" data-calendar-tech-id="${tech.id}">
+              <div class="calendar ${calendarLoading ? "is-loading" : ""}" data-calendar-tech-id="${tech.id}">
                 <div class="time-axis">${renderTimeLabels()}</div>
                 <div class="slot-grid">${renderTimeSlots(tech.id, timed, allDayBlocked)}</div>
+                ${renderCalendarLoadingOverlay(calendarLoading)}
               </div>
             `}
           </section>
@@ -1858,9 +1861,10 @@ const technicians = [
           ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Calendar")}
           ${scheduleCollapsed ? "" : `
             ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
-            <div class="calendar" data-calendar-tech-id="${tech.id}">
+            <div class="calendar ${calendarLoading ? "is-loading" : ""}" data-calendar-tech-id="${tech.id}">
               <div class="time-axis">${renderTimeLabels()}</div>
               <div class="slot-grid">${renderTimeSlots(tech.id, timed, allDayBlocked)}</div>
+              ${renderCalendarLoadingOverlay(calendarLoading)}
             </div>
           `}
           ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
@@ -1869,6 +1873,29 @@ const technicians = [
           ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
         </section>
       `;
+    }
+
+    function renderCalendarLoadingOverlay(isLoading) {
+      if (!isLoading) return "";
+      return `
+        <div class="calendar-loading-overlay" aria-live="polite" aria-label="Loading calendar">
+          <span class="calendar-spinner"></span>
+          <span>Loading calendar</span>
+        </div>
+      `;
+    }
+
+    function isCalendarLoading(date = selectedDate()) {
+      return Boolean(state.calendarLoadingDates[date]);
+    }
+
+    function setCalendarLoading(date, loading) {
+      if (loading) {
+        state.calendarLoadingDates[date] = true;
+      } else {
+        delete state.calendarLoadingDates[date];
+      }
+      if (date === selectedDate()) renderBoard();
     }
 
     function renderTechGroupToggle(techId, group, collapsed, label, count = null, badgeTone = "") {
@@ -2972,25 +2999,31 @@ const technicians = [
         if (!options.skipPrefetch) prefetchAdjacentAppointments(date);
         return;
       }
-      const result = await callHalo("loadAppointments", {
-        date,
-        technicianIds: state.selectedTechs
-      }, { quiet: true });
-      debugLog("HaloPSA appointment load result", result?.meta || result);
-      if (!result?.ok) return;
-      const appointments = result.data?.appointments || [];
-      setAppointmentCacheEntry(date, appointments);
-      if (options.apply !== false) {
-        syncHaloAppointments(appointments, date);
-        if (date === selectedDate()) {
-          loadHaloDateOnlyTasks({ quiet: true });
-          renderBoard();
+      const shouldShowCalendarLoading = options.apply !== false && date === selectedDate();
+      if (shouldShowCalendarLoading) setCalendarLoading(date, true);
+      try {
+        const result = await callHalo("loadAppointments", {
+          date,
+          technicianIds: state.selectedTechs
+        }, { quiet: true });
+        debugLog("HaloPSA appointment load result", result?.meta || result);
+        if (!result?.ok) return;
+        const appointments = result.data?.appointments || [];
+        setAppointmentCacheEntry(date, appointments);
+        if (options.apply !== false) {
+          syncHaloAppointments(appointments, date);
+          if (date === selectedDate()) {
+            loadHaloDateOnlyTasks({ quiet: true });
+            renderBoard();
+          }
         }
-      }
-      if (!options.skipPrefetch) prefetchAdjacentAppointments(date);
-      debugLog("HaloPSA board appointment sync", appointmentVisibilitySummary(result.data?.appointments || []));
-      if (!options.quiet && result.data?.appointments?.length) {
-        toast("Halo appointments loaded", `${result.data.appointments.length} calendar items matched this view.`);
+        if (!options.skipPrefetch) prefetchAdjacentAppointments(date);
+        debugLog("HaloPSA board appointment sync", appointmentVisibilitySummary(result.data?.appointments || []));
+        if (!options.quiet && result.data?.appointments?.length) {
+          toast("Halo appointments loaded", `${result.data.appointments.length} calendar items matched this view.`);
+        }
+      } finally {
+        if (shouldShowCalendarLoading) setCalendarLoading(date, false);
       }
     }
 

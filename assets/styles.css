@@ -1364,6 +1364,7 @@
       overflow-x: hidden;
       overflow-y: auto;
       background: var(--panel);
+      position: relative;
     }
 
     .board.vertical .calendar {
@@ -1407,6 +1408,39 @@
     .slot-grid {
       position: relative;
       min-width: 0;
+    }
+
+    .calendar.is-loading .time-axis,
+    .calendar.is-loading .slot-grid {
+      opacity: 0.38;
+    }
+
+    .calendar-loading-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 18;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      color: var(--text);
+      font-weight: 800;
+      background: color-mix(in srgb, var(--panel) 72%, transparent);
+      backdrop-filter: blur(2px);
+      pointer-events: none;
+    }
+
+    .calendar-spinner {
+      width: 22px;
+      height: 22px;
+      border: 3px solid color-mix(in srgb, var(--text) 18%, transparent);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: calendarSpin 0.8s linear infinite;
+    }
+
+    @keyframes calendarSpin {
+      to { transform: rotate(360deg); }
     }
 
     .current-time-marker {
