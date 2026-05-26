@@ -318,11 +318,15 @@ async function handleAppointmentLoad(payload, env) {
   const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "");
   const agentIds = (payload.technicianIds?.length ? payload.technicianIds : configuredTechnicianIds).map(String);
   const appointmentLoad = await loadAppointmentsWithFallbacks(env, date, agentIds);
+  const holidayLoad = await loadAppointmentHolidays(env, date, agentIds);
   const { records: rawAppointments, meta } = appointmentLoad;
+  const { records: rawHolidays, meta: holidayMeta } = holidayLoad;
   debugLog(env, "loadAppointments request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages, variant: meta.variant });
 
-  const appointments = rawAppointments
-    .flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
+  const appointments = [
+    ...rawAppointments.flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env)),
+    ...rawHolidays.flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
+  ]
     .filter(appointment => appointment.date === date)
     .filter(Boolean);
   debugLog(env, "loadAppointments response", {
@@ -330,6 +334,7 @@ async function handleAppointmentLoad(payload, env) {
     agentIds,
     pages: meta.pages,
     rawCount: rawAppointments.length,
+    rawHolidayCount: rawHolidays.length,
     normalizedCount: appointments.length,
     normalizedSample: appointments.slice(0, 5)
   });
@@ -340,11 +345,16 @@ async function handleAppointmentLoad(payload, env) {
     meta: {
       haloPath: meta.firstPath,
       rawCount: rawAppointments.length,
+      rawHolidayCount: rawHolidays.length,
       normalizedCount: appointments.length,
       pages: meta.pages,
       variant: meta.variant,
       variants: meta.variants,
-      rawSample: payload.debug ? rawAppointments.slice(0, 10).map(summarizeRawAppointment) : undefined
+      holidayPath: holidayMeta.firstPath,
+      holidayPages: holidayMeta.pages,
+      holidayVariants: holidayMeta.variants,
+      rawSample: payload.debug ? rawAppointments.slice(0, 10).map(summarizeRawAppointment) : undefined,
+      rawHolidaySample: payload.debug ? rawHolidays.slice(0, 10).map(summarizeRawAppointment) : undefined
     }
   };
 }
@@ -389,102 +399,10 @@ function appointmentQueryVariants(date, agentIds) {
     agents: agentIds.join(","),
     showall: "true",
     showappointments: "true",
-    showholidays: "true",
-    appointmentsonly: "false",
     excluderecurringmaster: "true",
     count: String(DEFAULT_PAGE_SIZE)
   };
   return [
-    ...agentIds.flatMap(agentId => [
-      {
-        name: `holiday-start-only-agent-${agentId}`,
-        params: new URLSearchParams({
-          agents: agentId,
-          showholidays: "true",
-          appointmentsonly: "false",
-          count: String(DEFAULT_PAGE_SIZE),
-          start_date: date
-        })
-      },
-      {
-        name: `holiday-date-range-agent-${agentId}`,
-        params: new URLSearchParams({
-          agents: agentId,
-          showall: "true",
-          showholidays: "true",
-          appointmentsonly: "false",
-          excluderecurringmaster: "true",
-          count: String(DEFAULT_PAGE_SIZE),
-          start_date: date,
-          end_date: date
-        })
-      },
-      {
-        name: `holiday-date-range-agent-id-${agentId}`,
-        params: new URLSearchParams({
-          agent_id: agentId,
-          showall: "true",
-          showholidays: "true",
-          appointmentsonly: "false",
-          excluderecurringmaster: "true",
-          count: String(DEFAULT_PAGE_SIZE),
-          start_date: date,
-          end_date: date
-        })
-      },
-      {
-        name: `holiday-datetime-range-agent-${agentId}`,
-        params: new URLSearchParams({
-          agents: agentId,
-          showall: "true",
-          showholidays: "true",
-          appointmentsonly: "false",
-          excluderecurringmaster: "true",
-          count: String(DEFAULT_PAGE_SIZE),
-          start_date: `${date}T00:00:00`,
-          end_date: `${date}T23:59:59`
-        })
-      },
-      {
-        name: `holiday-datetime-range-agent-id-${agentId}`,
-        params: new URLSearchParams({
-          agent_id: agentId,
-          showall: "true",
-          showholidays: "true",
-          appointmentsonly: "false",
-          excluderecurringmaster: "true",
-          count: String(DEFAULT_PAGE_SIZE),
-          start_date: `${date}T00:00:00`,
-          end_date: `${date}T23:59:59`
-        })
-      }
-    ]),
-    {
-      name: "holiday-date-range",
-      params: new URLSearchParams({
-        agents: agentIds.join(","),
-        showall: "true",
-        showholidays: "true",
-        appointmentsonly: "false",
-        excluderecurringmaster: "true",
-        count: String(DEFAULT_PAGE_SIZE),
-        start_date: date,
-        end_date: date
-      })
-    },
-    {
-      name: "holiday-datetime-range",
-      params: new URLSearchParams({
-        agents: agentIds.join(","),
-        showall: "true",
-        showholidays: "true",
-        appointmentsonly: "false",
-        excluderecurringmaster: "true",
-        count: String(DEFAULT_PAGE_SIZE),
-        start_date: `${date}T00:00:00`,
-        end_date: `${date}T23:59:59`
-      })
-    },
     {
       name: "datetime",
       params: new URLSearchParams({
@@ -529,6 +447,43 @@ function appointmentQueryVariants(date, agentIds) {
       })
     }
   ];
+}
+
+async function loadAppointmentHolidays(env, date, agentIds) {
+  const records = [];
+  const seen = new Set();
+  const summaries = [];
+  const lookbackDate = addDays(date, -Number(env.HALO_HOLIDAY_LOOKBACK_DAYS || 14));
+
+  for (const agentId of agentIds) {
+    const params = new URLSearchParams({
+      agents: agentId,
+      appointmentsonly: "false",
+      showholidays: "true",
+      start_date: lookbackDate,
+      count: String(DEFAULT_PAGE_SIZE)
+    });
+    const result = await haloGetAllPages(env, "/api/Appointment", params);
+    summaries.push({ variant: `holiday-start-agent-${agentId}`, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
+    result.records
+      .filter(record => record.holiday_id || record.holidayid)
+      .forEach(record => {
+        const key = appointmentRecordKey(record);
+        if (seen.has(key)) return;
+        seen.add(key);
+        records.push(record);
+      });
+  }
+
+  return {
+    records,
+    meta: {
+      firstPath: summaries.find(summary => summary.firstPath)?.firstPath || "",
+      pages: summaries.reduce((total, summary) => total + (summary.pages || 0), 0),
+      variant: "holiday-appointments",
+      variants: summaries
+    }
+  };
 }
 
 async function handleDateOnlyTaskLoad(payload, env) {
@@ -956,12 +911,19 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
     kind,
     time: kind === "timed" ? startTime : undefined,
     duration,
-    date: datePart(startDate, env) || date,
+    date: appointmentDisplayDate(startDate, endDate, date, env),
     label: stripHtml(title),
     completed,
     availabilityBlock,
     source: "haloAppointment"
   }));
+}
+
+function appointmentDisplayDate(startDate, endDate, selectedDate, env) {
+  const start = datePart(startDate, env);
+  const end = datePart(endDate, env) || start;
+  if (start && end && start <= selectedDate && selectedDate <= end) return selectedDate;
+  return start || selectedDate;
 }
 
 function syntheticCalendarId(value) {
@@ -1250,6 +1212,13 @@ function addMinutes(time, minutes) {
   const nextHour = Math.floor(total / 60) % 24;
   const nextMinute = total % 60;
   return `${String(nextHour).padStart(2, "0")}:${String(nextMinute).padStart(2, "0")}`;
+}
+
+function addDays(date, days) {
+  const parsed = new Date(`${date}T00:00:00Z`);
+  if (!Number.isFinite(parsed.getTime())) return date;
+  parsed.setUTCDate(parsed.getUTCDate() + days);
+  return parsed.toISOString().slice(0, 10);
 }
 
 function durationMinutes(startDate, endDate) {
