@@ -453,26 +453,31 @@ async function loadAppointmentHolidays(env, date, agentIds) {
   const records = [];
   const seen = new Set();
   const summaries = [];
-  const lookbackDate = addDays(date, -Number(env.HALO_HOLIDAY_LOOKBACK_DAYS || 14));
+  const holidayStartDates = Array.from(new Set([
+    date,
+    addDays(date, -Number(env.HALO_HOLIDAY_LOOKBACK_DAYS || 4))
+  ]));
 
   for (const agentId of agentIds) {
-    const params = new URLSearchParams({
-      agents: agentId,
-      appointmentsonly: "false",
-      showholidays: "true",
-      start_date: lookbackDate,
-      count: String(DEFAULT_PAGE_SIZE)
-    });
-    const result = await haloGetAllPages(env, "/api/Appointment", params);
-    summaries.push({ variant: `holiday-start-agent-${agentId}`, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
-    result.records
-      .filter(record => record.holiday_id || record.holidayid)
-      .forEach(record => {
-        const key = appointmentRecordKey(record);
-        if (seen.has(key)) return;
-        seen.add(key);
-        records.push(record);
+    for (const startDate of holidayStartDates) {
+      const params = new URLSearchParams({
+        agents: agentId,
+        appointmentsonly: "false",
+        showholidays: "true",
+        start_date: startDate,
+        count: String(DEFAULT_PAGE_SIZE)
       });
+      const result = await haloGetAllPages(env, "/api/Appointment", params);
+      summaries.push({ variant: `holiday-start-agent-${agentId}-${startDate}`, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
+      result.records
+        .filter(record => record.holiday_id || record.holidayid)
+        .forEach(record => {
+          const key = appointmentRecordKey(record);
+          if (seen.has(key)) return;
+          seen.add(key);
+          records.push(record);
+        });
+    }
   }
 
   return {
