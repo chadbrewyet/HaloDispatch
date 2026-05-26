@@ -464,12 +464,12 @@ async function loadAppointmentHolidays(env, date, agentIds) {
         agents: agentId,
         appointmentsonly: "false",
         showholidays: "true",
-        start_date: startDate,
-        count: String(DEFAULT_PAGE_SIZE)
+        start_date: startDate
       });
-      const result = await haloGetAllPages(env, "/api/Appointment", params);
-      summaries.push({ variant: `holiday-start-agent-${agentId}-${startDate}`, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
-      result.records
+      const response = await haloRequest(env, `/api/Appointment?${params.toString()}`, { method: "GET" });
+      const resultRecords = unwrapList(response.data);
+      summaries.push({ variant: `holiday-start-agent-${agentId}-${startDate}`, count: resultRecords.length, firstPath: `/api/Appointment?${params.toString()}`, pages: 1 });
+      resultRecords
         .filter(record => record.holiday_id || record.holidayid)
         .forEach(record => {
           const key = appointmentRecordKey(record);
