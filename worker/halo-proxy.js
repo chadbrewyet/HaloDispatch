@@ -397,6 +397,16 @@ function appointmentQueryVariants(date, agentIds) {
   return [
     ...agentIds.flatMap(agentId => [
       {
+        name: `holiday-start-only-agent-${agentId}`,
+        params: new URLSearchParams({
+          agents: agentId,
+          showholidays: "true",
+          appointmentsonly: "false",
+          count: String(DEFAULT_PAGE_SIZE),
+          start_date: date
+        })
+      },
+      {
         name: `holiday-date-range-agent-${agentId}`,
         params: new URLSearchParams({
           agents: agentId,
