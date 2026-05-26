@@ -425,7 +425,7 @@ const technicians = [
       const filterIndexes = Object.keys(state.listFilters || {})
         .map(key => Number((key.match(/^report-(\d+)$/) || [])[1]))
         .filter(index => Number.isInteger(index) && index >= 0);
-      const requiredLength = Math.min(5, Math.max(1, state.reportLists.length, filterIndexes.length ? Math.max(...filterIndexes) + 1 : 0));
+      const requiredLength = Math.min(5, Math.max(state.reportLists.length, filterIndexes.length ? Math.max(...filterIndexes) + 1 : 0));
       while (state.reportLists.length < requiredLength) state.reportLists.push("api-open");
       state.reportLists = state.reportLists.slice(0, 5);
       state.reportLists.forEach((reportId, index) => {
@@ -901,6 +901,12 @@ const technicians = [
         updateTicketPanelBadges([]);
         return;
       }
+      if (!state.reportLists.length) {
+        $("reportLists").className = "report-lists expanded-count-0";
+        $("reportLists").innerHTML = `<div class="empty">No ticket lists configured yet.</div>`;
+        updateTicketPanelBadges([]);
+        return;
+      }
       const counts = state.reportLists.map((reportId, index) => filteredTicketsForList(reportId, index).length);
       ensureTicketListAccordion();
       const expandedCount = state.reportLists.filter((reportId, index) => !state.collapsedLists[sectionKey(index)]).length;
@@ -908,11 +914,9 @@ const technicians = [
       $("reportLists").innerHTML = state.reportLists.map((reportId, index) => renderReportList(reportId, index)).join("");
       updateTicketPanelBadges(counts);
       $("reportLists").querySelectorAll("[data-remove-list]").forEach(button => {
-        button.addEventListener("click", () => {
-          state.reportLists.splice(Number(button.dataset.index), 1);
-          resetReportListHeights();
-          saveLocalSettings();
-          renderReportLists();
+        button.addEventListener("click", event => {
+          event.stopPropagation();
+          removeTicketList(Number(button.dataset.index));
         });
       });
       $("reportLists").querySelectorAll("[data-list-view]").forEach(button => {
@@ -995,6 +999,16 @@ const technicians = [
         state.collapsedLists[sectionKey(index)] = true;
       });
       if (expand) state.collapsedLists[key] = false;
+    }
+
+    function removeTicketList(index) {
+      const lists = ticketListPayload();
+      lists.splice(index, 1);
+      applyTicketListPayload(lists);
+      resetReportListHeights();
+      saveLocalSettings();
+      saveHaloUserPreferences({ quiet: true });
+      renderReportLists();
     }
 
     function renderReportList(reportId, index) {
@@ -1521,7 +1535,7 @@ const technicians = [
       const filter = state.savedFilters[name];
       if (!filter || !state.draftFilter) return;
       state.draftFilter = {
-        name: filter.name || name,
+        name,
         title: filter.title || filter.name || name,
         color: filter.color || state.draftFilter.color || "#1976a3",
         includeAssigned: Boolean(filter.includeAssigned),
@@ -1724,7 +1738,7 @@ const technicians = [
       const saved = state.savedFilters[name];
       state.listFilters[key] = normalizeFilterShape({
         ...saved,
-        name: saved.name || name,
+        name,
         title: saved.title || saved.name || name,
         conditions: structuredClone(filterConditions(saved))
       });
