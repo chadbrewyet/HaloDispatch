@@ -1014,8 +1014,9 @@ function normalizeHoliday(holiday, date, allowedAgentIds, env) {
   const sourceId = holiday.holid ?? holiday.id ?? holiday.guid;
   if (!sourceId) return [];
 
-  let agentIds = splitAgentIds(holiday.agent_id ?? holiday.agentid).filter(agentId => allowedAgentIds.includes(agentId));
-  if (!agentIds.length && allowedAgentIds.length) agentIds = allowedAgentIds;
+  const rawAgentIds = splitAgentIds(holiday.agent_id ?? holiday.agentid).filter(agentId => agentId !== "0");
+  let agentIds = rawAgentIds.filter(agentId => allowedAgentIds.includes(agentId));
+  if (!rawAgentIds.length && allowedAgentIds.length) agentIds = allowedAgentIds;
   if (!agentIds.length) return [];
 
   const startDate = holiday.date_datetime || holiday.date || holiday.date_only || date;
