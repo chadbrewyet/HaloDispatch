@@ -452,24 +452,18 @@ async function loadHolidaysForAgents(env, date, agentIds) {
   const queryAgentIds = Array.from(new Set(["", ...agentIds.map(String)]));
 
   for (const agentId of queryAgentIds) {
-    const params = new URLSearchParams({
-      approved_only: "true",
-      inclusive_start: "true",
-      inclusive_end: "true",
-      include_apid: "true",
-      start_date: `${date}T00:00:00`,
-      end_date: `${date}T23:59:59`,
-      count: String(DEFAULT_PAGE_SIZE)
-    });
-    if (agentId) params.set("agent_id", agentId);
-    const result = await haloGetAllPages(env, "/api/Holiday", params);
-    queries.push({ agentId: agentId || "all", count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
-    result.records.forEach(record => {
-      const key = holidayRecordKey(record, agentId);
-      if (seen.has(key)) return;
-      seen.add(key);
-      merged.push(record);
-    });
+    for (const variant of holidayQueryVariants(date, agentId)) {
+      const result = await haloGetAllPages(env, "/api/Holiday", variant.params);
+      queries.push({ agentId: agentId || "all", variant: variant.name, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
+      result.records
+        .filter(record => holidayOverlapsDate(record, date, env))
+        .forEach(record => {
+          const key = holidayRecordKey(record, agentId);
+          if (seen.has(key)) return;
+          seen.add(key);
+          merged.push(record);
+        });
+    }
   }
 
   const workdayResult = await haloGetAllPages(env, "/api/Workday", new URLSearchParams({
@@ -502,6 +496,53 @@ async function loadHolidaysForAgents(env, date, agentIds) {
       queries
     }
   };
+}
+
+function holidayQueryVariants(date, agentId) {
+  const common = {
+    inclusive_start: "true",
+    inclusive_end: "true",
+    include_apid: "true",
+    count: String(DEFAULT_PAGE_SIZE)
+  };
+  const variants = [
+    {
+      name: "datetime-approved",
+      params: new URLSearchParams({
+        ...common,
+        approved_only: "true",
+        start_date: `${date}T00:00:00`,
+        end_date: `${date}T23:59:59`
+      })
+    },
+    {
+      name: "date-approved",
+      params: new URLSearchParams({
+        ...common,
+        approved_only: "true",
+        start_date: date,
+        end_date: date
+      })
+    },
+    {
+      name: "datetime-all-status",
+      params: new URLSearchParams({
+        ...common,
+        start_date: `${date}T00:00:00`,
+        end_date: `${date}T23:59:59`
+      })
+    },
+    {
+      name: "date-all-status",
+      params: new URLSearchParams({
+        ...common,
+        start_date: date,
+        end_date: date
+      })
+    }
+  ];
+  if (agentId) variants.forEach(variant => variant.params.set("agent_id", agentId));
+  return variants;
 }
 
 function holidayRecordKey(record, queriedAgentId = "") {
