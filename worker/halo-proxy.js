@@ -410,9 +410,35 @@ function appointmentQueryVariants(date, agentIds) {
         })
       },
       {
+        name: `holiday-date-range-agent-id-${agentId}`,
+        params: new URLSearchParams({
+          agent_id: agentId,
+          showall: "true",
+          showholidays: "true",
+          appointmentsonly: "false",
+          excluderecurringmaster: "true",
+          count: String(DEFAULT_PAGE_SIZE),
+          start_date: date,
+          end_date: date
+        })
+      },
+      {
         name: `holiday-datetime-range-agent-${agentId}`,
         params: new URLSearchParams({
           agents: agentId,
+          showall: "true",
+          showholidays: "true",
+          appointmentsonly: "false",
+          excluderecurringmaster: "true",
+          count: String(DEFAULT_PAGE_SIZE),
+          start_date: `${date}T00:00:00`,
+          end_date: `${date}T23:59:59`
+        })
+      },
+      {
+        name: `holiday-datetime-range-agent-id-${agentId}`,
+        params: new URLSearchParams({
+          agent_id: agentId,
           showall: "true",
           showholidays: "true",
           appointmentsonly: "false",
