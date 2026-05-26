@@ -395,6 +395,34 @@ function appointmentQueryVariants(date, agentIds) {
     count: String(DEFAULT_PAGE_SIZE)
   };
   return [
+    ...agentIds.flatMap(agentId => [
+      {
+        name: `holiday-date-range-agent-${agentId}`,
+        params: new URLSearchParams({
+          agents: agentId,
+          showall: "true",
+          showholidays: "true",
+          appointmentsonly: "false",
+          excluderecurringmaster: "true",
+          count: String(DEFAULT_PAGE_SIZE),
+          start_date: date,
+          end_date: date
+        })
+      },
+      {
+        name: `holiday-datetime-range-agent-${agentId}`,
+        params: new URLSearchParams({
+          agents: agentId,
+          showall: "true",
+          showholidays: "true",
+          appointmentsonly: "false",
+          excluderecurringmaster: "true",
+          count: String(DEFAULT_PAGE_SIZE),
+          start_date: `${date}T00:00:00`,
+          end_date: `${date}T23:59:59`
+        })
+      }
+    ]),
     {
       name: "holiday-date-range",
       params: new URLSearchParams({
@@ -419,18 +447,6 @@ function appointmentQueryVariants(date, agentIds) {
         count: String(DEFAULT_PAGE_SIZE),
         start_date: `${date}T00:00:00`,
         end_date: `${date}T23:59:59`
-      })
-    },
-    {
-      name: "holiday-date-start-only",
-      params: new URLSearchParams({
-        agents: agentIds.join(","),
-        showall: "true",
-        showholidays: "true",
-        appointmentsonly: "false",
-        excluderecurringmaster: "true",
-        count: String(DEFAULT_PAGE_SIZE),
-        start_date: date
       })
     },
     {
