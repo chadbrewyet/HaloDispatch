@@ -514,8 +514,9 @@ function holidayOverlapsDate(holiday, date, env) {
   const startDate = holiday.date_datetime || holiday.date || holiday.date_only || "";
   if (!startDate) return false;
   const endDate = holiday.end_date || holiday.end_date_only || startDate;
-  const start = datePart(startDate, env);
-  const end = datePart(endDate, env) || start;
+  const literalDates = isTrue(holiday.allday) || Boolean(holiday.date_only || holiday.end_date_only);
+  const start = literalDates ? customDatePart(startDate) : datePart(startDate, env);
+  const end = literalDates ? customDatePart(endDate) : (datePart(endDate, env) || start);
   return Boolean(start && end && start <= date && date <= end);
 }
 
@@ -977,7 +978,7 @@ function normalizeHoliday(holiday, date, allowedAgentIds, env) {
   const duration = allDay ? 1440 : durationMinutes(startDate, endDate);
   const kind = allDay ? "allDay" : "timed";
   const label = holiday.name || holiday.holiday_type_name || holiday.workday_name || holiday.agent_name || "Holiday / PTO";
-  const displayDate = appointmentDisplayDate(startDate, endDate, date, env);
+  const displayDate = holidayDisplayDate(holiday, date, env);
 
   return agentIds.map(agentId => ({
     appointmentId: `holiday:${sourceId}:${agentId}`,
@@ -998,6 +999,16 @@ function normalizeHoliday(holiday, date, allowedAgentIds, env) {
 function appointmentDisplayDate(startDate, endDate, selectedDate, env) {
   const start = datePart(startDate, env);
   const end = datePart(endDate, env) || start;
+  if (start && end && start <= selectedDate && selectedDate <= end) return selectedDate;
+  return start || selectedDate;
+}
+
+function holidayDisplayDate(holiday, selectedDate, env) {
+  const startDate = holiday.date_datetime || holiday.date || holiday.date_only || selectedDate;
+  const endDate = holiday.end_date || holiday.end_date_only || startDate;
+  const literalDates = isTrue(holiday.allday) || Boolean(holiday.date_only || holiday.end_date_only);
+  const start = literalDates ? customDatePart(startDate) : datePart(startDate, env);
+  const end = literalDates ? customDatePart(endDate) : (datePart(endDate, env) || start);
   if (start && end && start <= selectedDate && selectedDate <= end) return selectedDate;
   return start || selectedDate;
 }
