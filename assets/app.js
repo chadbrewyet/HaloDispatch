@@ -1803,7 +1803,6 @@ const technicians = [
       const allDay = visibleItems.filter(item => item.kind === "allDay");
       const noTime = visibleItems.filter(item => item.kind === "noTime");
       const timed = visibleItems.filter(item => item.kind === "timed");
-      const allDayBlocked = allDay.some(item => item.availabilityBlock);
       const scheduleKey = techGroupKey(tech.id, "schedule");
       const noTimeKey = techGroupKey(tech.id, "noTime");
       const pastKey = techGroupKey(tech.id, "pastNoTime");
@@ -1834,7 +1833,7 @@ const technicians = [
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
               <div class="calendar" data-calendar-tech-id="${tech.id}">
                 <div class="time-axis">${renderTimeLabels()}</div>
-                <div class="slot-grid">${renderTimeSlots(tech.id, timed, allDayBlocked)}</div>
+                <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
               </div>
             `}
           </section>
@@ -1855,7 +1854,7 @@ const technicians = [
             ${renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
             <div class="calendar" data-calendar-tech-id="${tech.id}">
               <div class="time-axis">${renderTimeLabels()}</div>
-              <div class="slot-grid">${renderTimeSlots(tech.id, timed, allDayBlocked)}</div>
+              <div class="slot-grid">${renderTimeSlots(tech.id, timed)}</div>
             </div>
           `}
           ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
@@ -2010,7 +2009,7 @@ const technicians = [
       return `${state.orientation}:${techId}`;
     }
 
-    function renderTimeSlots(techId, timed, allDayBlocked = false) {
+    function renderTimeSlots(techId, timed) {
       const slots = [];
       const nowMarker = renderCurrentTimeMarker();
       for (let minutes = calendarStartMinutes(); minutes < calendarEndMinutes(); minutes += 30) {
@@ -2018,21 +2017,13 @@ const technicians = [
         const slotItems = timed
           .filter(item => slotForTime(item.time) === time)
           .sort((a, b) => String(a.time || "").localeCompare(String(b.time || "")));
-        const blocked = allDayBlocked || timed.some(item => item.availabilityBlock && appointmentOverlapsSlot(item, minutes));
         slots.push(`
-          <div class="time-slot ${slotItems.length > 1 ? "has-overlap" : ""} ${blocked ? "availability-blocked" : ""}" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
+          <div class="time-slot ${slotItems.length > 1 ? "has-overlap" : ""}" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
             ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length, state.orientation)).join("")}
           </div>
         `);
       }
       return `${nowMarker}${slots.join("")}`;
-    }
-
-    function appointmentOverlapsSlot(item, slotStart) {
-      const itemStart = timeToMinutes(item.time || "00:00");
-      const itemEnd = itemStart + Number(item.duration || 30);
-      const slotEnd = slotStart + 30;
-      return itemStart < slotEnd && itemEnd > slotStart;
     }
 
     function renderCurrentTimeMarker() {
@@ -2075,19 +2066,15 @@ const technicians = [
 
     function renderSmallEvent(item) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
-      const draggable = item.availabilityBlock ? "false" : "true";
-      const prefix = item.haloTicketId ? `#${item.ticketId} ` : "";
-      return `<div class="small-event ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">${prefix}${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
+      return `<div class="small-event ${appointmentClass(item, ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
     }
 
     function renderAppointment(item, index = 0, count = 1, orientation = state.orientation) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
       const durationSlots = Math.max(1, Math.ceil((item.duration || 30) / 30));
-      const draggable = item.availabilityBlock ? "false" : "true";
-      const prefix = item.haloTicketId ? `#${item.ticketId} ` : "";
       return `
-        <div class="appointment ${count > 1 ? "overlap-card" : ""} ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};--duration-slots:${durationSlots};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
-          <strong>${prefix}${escapeHtml(item.label || ticket?.title || "Appointment")}</strong>
+        <div class="appointment ${count > 1 ? "overlap-card" : ""} ${appointmentClass(item, ticket)}" draggable="true" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};--duration-slots:${durationSlots};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
+          <strong>#${item.ticketId} ${escapeHtml(item.label || ticket?.title || "Appointment")}</strong>
           <span>${escapeHtml(formatTime(item.time))} - ${item.duration || 30}m</span>
         </div>
       `;
@@ -2262,7 +2249,7 @@ const technicians = [
     }
 
     function makeTicketsDraggable() {
-      document.querySelectorAll(".ticket-card, .appointment[draggable='true'], .small-event[draggable='true']").forEach(card => {
+      document.querySelectorAll(".ticket-card, .appointment, .small-event").forEach(card => {
         card.addEventListener("dragstart", event => {
           clearTicketAttention(Number(card.dataset.ticketId), { render: false });
           card.classList.add("dragging");
@@ -3217,7 +3204,6 @@ const technicians = [
 
     function appointmentClass(item, ticket) {
       if (item.completed || ticket?.completed) return "color-completed";
-      if (item.availabilityBlock) return "color-availability-block";
       if (!item.haloTicketId) return "color-ticketless";
       return ticketColorClass(ticket);
     }

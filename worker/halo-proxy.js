@@ -340,45 +340,23 @@ async function handleAppointmentLoad(payload, env) {
       haloPath: meta.firstPath,
       rawCount: rawAppointments.length,
       normalizedCount: appointments.length,
-      pages: meta.pages,
-      variant: meta.variant,
-      variants: meta.variants,
-      rawSample: payload.debug ? rawAppointments.slice(0, 10).map(summarizeRawAppointment) : undefined
+      pages: meta.pages
     }
   };
 }
 
 async function loadAppointmentsWithFallbacks(env, date, agentIds) {
   const variants = appointmentQueryVariants(date, agentIds);
-  const merged = [];
-  const seen = new Set();
-  const summaries = [];
+  let bestResult = { records: [], meta: { firstPath: "", pages: 0, variant: "" } };
 
   for (const variant of variants) {
     const result = await haloGetAllPages(env, "/api/Appointment", variant.params);
     result.meta.variant = variant.name;
-    summaries.push({ variant: variant.name, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
-    result.records.forEach(record => {
-      const key = appointmentRecordKey(record);
-      if (seen.has(key)) return;
-      seen.add(key);
-      merged.push(record);
-    });
+    if (!bestResult.records.length) bestResult = result;
+    if (result.records.length) return result;
   }
 
-  return {
-    records: merged,
-    meta: {
-      firstPath: summaries.find(summary => summary.firstPath)?.firstPath || "",
-      pages: summaries.reduce((total, summary) => total + (summary.pages || 0), 0),
-      variant: "merged",
-      variants: summaries
-    }
-  };
-}
-
-function appointmentRecordKey(record) {
-  return String(record?.id ?? record?.appointment_id ?? record?.apptid ?? record?.guid ?? JSON.stringify(record));
+  return bestResult;
 }
 
 function appointmentQueryVariants(date, agentIds) {
@@ -834,23 +812,10 @@ function isCompletedTicket(ticket) {
 
 function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const ticketId = appointment.ticket_id ?? appointment.faultid ?? appointment.fault_id ?? appointment.apfaultid;
-  const appointmentId = appointment.id ?? appointment.appointment_id ?? appointment.apptid ?? appointment.appointmentid ?? appointment.event_id ?? appointment.eventid;
-  const displayId = ticketId ?? appointmentId;
+  const displayId = ticketId ?? appointment.id ?? appointment.appointment_id;
   if (!displayId) return [];
 
   let agentIds = appointmentAgentIds(appointment).filter(agentId => allowedAgentIds.includes(agentId));
-  const title = appointment.subject
-    || appointment.title
-    || appointment.summary
-    || appointment.note
-    || appointment.appointment_type_name
-    || appointment.appointmenttype_name
-    || appointment.appointmenttypename
-    || appointment.type_name
-    || appointment.typename
-    || `Appointment #${displayId}`;
-  const availabilityBlock = isAvailabilityBlock(appointment, title);
-  if (!agentIds.length && availabilityBlock && allowedAgentIds.length) agentIds = allowedAgentIds;
   if (!agentIds.length && allowedAgentIds.length === 1) agentIds = allowedAgentIds;
   if (!agentIds.length) return [];
 
@@ -860,81 +825,22 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const startTime = timePart(startDate, env) || "00:00";
   const duration = allDay ? 1440 : durationMinutes(startDate, endDate);
   const kind = allDay ? "allDay" : "timed";
+  const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
   const completed = isCompletedAppointment(appointment);
-  const displayDate = appointmentDisplayDate(startDate, endDate, date, env);
 
   return agentIds.map(agentId => ({
-    appointmentId: String(appointmentId || ""),
+    appointmentId: String(appointment.id || appointment.appointment_id || ""),
     ticketId: Number(displayId),
     haloTicketId: ticketId ? Number(ticketId) : null,
     techId: agentId,
     kind,
     time: kind === "timed" ? startTime : undefined,
     duration,
-    date: displayDate,
+    date: datePart(startDate, env) || date,
     label: stripHtml(title),
     completed,
-    availabilityBlock,
     source: "haloAppointment"
   }));
-}
-
-function appointmentDisplayDate(startDate, endDate, selectedDate, env) {
-  const start = datePart(startDate, env);
-  const end = datePart(endDate, env) || start;
-  if (start && end && start <= selectedDate && selectedDate <= end) return selectedDate;
-  return start || selectedDate;
-}
-
-function summarizeRawAppointment(appointment) {
-  return {
-    id: appointment.id,
-    appointment_id: appointment.appointment_id,
-    apptid: appointment.apptid,
-    faultid: appointment.faultid,
-    ticket_id: appointment.ticket_id,
-    subject: appointment.subject,
-    title: appointment.title,
-    note: stripHtml(appointment.note || "").slice(0, 120),
-    appointment_type_name: appointment.appointment_type_name,
-    appointmenttype_name: appointment.appointmenttype_name,
-    type_name: appointment.type_name,
-    type: appointment.type,
-    status: appointment.status,
-    agent_id: appointment.agent_id,
-    agentid: appointment.agentid,
-    agent_ids: appointment.agent_ids,
-    agents: Array.isArray(appointment.agents) ? appointment.agents.slice(0, 5) : undefined,
-    start: appointmentDateValue(appointment, "start"),
-    end: appointmentDateValue(appointment, "end"),
-    allday: appointment.allday ?? appointment.all_day ?? appointment.isallday ?? appointment.is_all_day
-  };
-}
-
-function isAvailabilityBlock(appointment, title = "") {
-  const values = [
-    title,
-    appointment.appointment_type_name,
-    appointment.appointmenttype_name,
-    appointment.appointmenttypename,
-    appointment.type_name,
-    appointment.typename,
-    appointment.type,
-    appointment.status,
-    appointment.note,
-    appointment.subject,
-    appointment.title,
-    appointment.summary
-  ].map(value => String(value || "").toLowerCase());
-  return values.some(value => {
-    return value.includes("holiday")
-      || value.includes("pto")
-      || value.includes("paid time off")
-      || value.includes("vacation")
-      || value.includes("out of office")
-      || value.includes("out-of-office")
-      || value.includes("sick");
-  });
 }
 
 function isCompletedAppointment(appointment) {
@@ -951,19 +857,12 @@ function isCompletedAppointment(appointment) {
 function appointmentAgentIds(appointment) {
   const agents = Array.isArray(appointment.agents) ? appointment.agents : [];
   const fromAgents = agents
-    .flatMap(agent => splitAgentIds(agent.id ?? agent.agent_id ?? agent.agentid ?? agent.agentId ?? agent.resource_id ?? agent.resourceid ?? agent.userid ?? agent.user_id))
-    .filter(value => value !== undefined && value !== null);
-  const resources = Array.isArray(appointment.resources) ? appointment.resources : [];
-  const fromResources = resources
-    .flatMap(resource => splitAgentIds(resource.id ?? resource.agent_id ?? resource.agentid ?? resource.resource_id ?? resource.resourceid ?? resource.userid ?? resource.user_id))
+    .flatMap(agent => splitAgentIds(agent.id ?? agent.agent_id ?? agent.agentid ?? agent.agentId ?? agent.resource_id ?? agent.resourceid))
     .filter(value => value !== undefined && value !== null);
   const primary = [
     appointment.agent_id,
     appointment.agentid,
     appointment.agentId,
-    appointment.userid,
-    appointment.user_id,
-    appointment.userId,
     appointment.assigned_agent_id,
     appointment.assigned_agentid,
     appointment.scheduled_for_id,
@@ -975,7 +874,7 @@ function appointmentAgentIds(appointment) {
     appointment.agent_ids,
     appointment.agentids
   ].flatMap(splitAgentIds).filter(value => value !== undefined && value !== null);
-  return Array.from(new Set([...primary, ...fromAgents, ...fromResources].map(String)));
+  return Array.from(new Set([...primary, ...fromAgents].map(String)));
 }
 
 function splitAgentIds(value) {
