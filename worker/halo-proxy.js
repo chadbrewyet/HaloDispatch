@@ -371,6 +371,20 @@ function appointmentQueryVariants(date, agentIds) {
   };
   return [
     {
+      name: "holiday-date-start-only",
+      params: new URLSearchParams({
+        ...common,
+        start_date: date
+      })
+    },
+    {
+      name: "holiday-datetime-start-only",
+      params: new URLSearchParams({
+        ...common,
+        start_date: `${date}T00:00:00`
+      })
+    },
+    {
       name: "datetime",
       params: new URLSearchParams({
         ...common,
