@@ -318,21 +318,17 @@ async function handleAppointmentLoad(payload, env) {
   const configuredTechnicianIds = parseListEnv(env.HALO_TECHNICIAN_IDS || "");
   const agentIds = (payload.technicianIds?.length ? payload.technicianIds : configuredTechnicianIds).map(String);
   const appointmentLoad = await loadAppointmentsWithFallbacks(env, date, agentIds);
-  const holidayLoad = await loadHolidaysForAgents(env, date, agentIds);
   const { records: rawAppointments, meta } = appointmentLoad;
-  const { records: rawHolidays, meta: holidayMeta } = holidayLoad;
   debugLog(env, "loadAppointments request", { date, agentIds, haloPath: meta.firstPath, pages: meta.pages, variant: meta.variant });
 
-  const appointments = [
-    ...rawAppointments.flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env)),
-    ...rawHolidays.flatMap(holiday => normalizeHoliday(holiday, date, agentIds, env))
-  ].filter(Boolean);
+  const appointments = rawAppointments
+    .flatMap(appointment => normalizeAppointment(appointment, date, agentIds, env))
+    .filter(Boolean);
   debugLog(env, "loadAppointments response", {
     date,
     agentIds,
     pages: meta.pages,
     rawCount: rawAppointments.length,
-    rawHolidayCount: rawHolidays.length,
     normalizedCount: appointments.length,
     normalizedSample: appointments.slice(0, 5)
   });
@@ -343,16 +339,11 @@ async function handleAppointmentLoad(payload, env) {
     meta: {
       haloPath: meta.firstPath,
       rawCount: rawAppointments.length,
-      rawHolidayCount: rawHolidays.length,
       normalizedCount: appointments.length,
       pages: meta.pages,
       variant: meta.variant,
       variants: meta.variants,
-      holidayPath: holidayMeta.firstPath,
-      holidayPages: holidayMeta.pages,
-      holidayQueries: holidayMeta.queries,
-      rawSample: payload.debug ? rawAppointments.slice(0, 10).map(summarizeRawAppointment) : undefined,
-      rawHolidaySample: payload.debug ? rawHolidays.slice(0, 10).map(summarizeRawHoliday) : undefined
+      rawSample: payload.debug ? rawAppointments.slice(0, 10).map(summarizeRawAppointment) : undefined
     }
   };
 }
@@ -443,128 +434,6 @@ function appointmentQueryVariants(date, agentIds) {
       })
     }
   ];
-}
-
-async function loadHolidaysForAgents(env, date, agentIds) {
-  const merged = [];
-  const seen = new Set();
-  const queries = [];
-  const queryAgentIds = Array.from(new Set(["", ...agentIds.map(String)]));
-
-  for (const agentId of queryAgentIds) {
-    for (const variant of holidayQueryVariants(date, agentId)) {
-      const result = await haloGetAllPages(env, "/api/Holiday", variant.params);
-      queries.push({ agentId: agentId || "all", variant: variant.name, count: result.records.length, firstPath: result.meta.firstPath, pages: result.meta.pages });
-      result.records
-        .filter(record => holidayOverlapsDate(record, date, env))
-        .forEach(record => {
-          const key = holidayRecordKey(record, agentId);
-          if (seen.has(key)) return;
-          seen.add(key);
-          merged.push(record);
-        });
-    }
-  }
-
-  const workdayResult = await haloGetAllPages(env, "/api/Workday", new URLSearchParams({
-    showholidays: "true",
-    count: String(DEFAULT_PAGE_SIZE)
-  }));
-  queries.push({ agentId: "workdays", count: workdayResult.records.length, firstPath: workdayResult.meta.firstPath, pages: workdayResult.meta.pages });
-  workdayResult.records
-    .flatMap(workday => {
-      const holidays = Array.isArray(workday.holidays) ? workday.holidays : [];
-      return holidays.map(holiday => ({
-        ...holiday,
-        workday_id: holiday.workday_id ?? workday.id,
-        workday_name: workday.name
-      }));
-    })
-    .filter(holiday => holidayOverlapsDate(holiday, date, env))
-    .forEach(record => {
-      const key = holidayRecordKey(record, "workdays");
-      if (seen.has(key)) return;
-      seen.add(key);
-      merged.push(record);
-    });
-
-  return {
-    records: merged,
-    meta: {
-      firstPath: queries.find(query => query.firstPath)?.firstPath || "",
-      pages: queries.reduce((total, query) => total + (query.pages || 0), 0),
-      queries
-    }
-  };
-}
-
-function holidayQueryVariants(date, agentId) {
-  const common = {
-    inclusive_start: "true",
-    inclusive_end: "true",
-    include_apid: "true",
-    count: String(DEFAULT_PAGE_SIZE)
-  };
-  const variants = [
-    {
-      name: "datetime-approved",
-      params: new URLSearchParams({
-        ...common,
-        approved_only: "true",
-        start_date: `${date}T00:00:00`,
-        end_date: `${date}T23:59:59`
-      })
-    },
-    {
-      name: "date-approved",
-      params: new URLSearchParams({
-        ...common,
-        approved_only: "true",
-        start_date: date,
-        end_date: date
-      })
-    },
-    {
-      name: "datetime-all-status",
-      params: new URLSearchParams({
-        ...common,
-        start_date: `${date}T00:00:00`,
-        end_date: `${date}T23:59:59`
-      })
-    },
-    {
-      name: "date-all-status",
-      params: new URLSearchParams({
-        ...common,
-        start_date: date,
-        end_date: date
-      })
-    }
-  ];
-  if (agentId) variants.forEach(variant => variant.params.set("agent_id", agentId));
-  return variants;
-}
-
-function holidayRecordKey(record, queriedAgentId = "") {
-  const agentId = record?.agent_id ?? record?.agentid ?? queriedAgentId ?? "";
-  if (!agentId || String(agentId) === "0" || String(agentId) === "workdays") {
-    const name = String(record?.name || record?.holiday_type_name || "").toLowerCase();
-    const start = customDatePart(record?.date_datetime || record?.date || record?.date_only || "");
-    const end = customDatePart(record?.end_date || record?.end_date_only || start);
-    if (name && start) return `global:${name}:${start}:${end}`;
-  }
-  const id = record?.holid ?? record?.id ?? record?.guid ?? JSON.stringify(record);
-  return `${id}:${agentId}`;
-}
-
-function holidayOverlapsDate(holiday, date, env) {
-  const startDate = holiday.date_datetime || holiday.date || holiday.date_only || "";
-  if (!startDate) return false;
-  const endDate = holiday.end_date || holiday.end_date_only || startDate;
-  const literalDates = isTrue(holiday.allday) || Boolean(holiday.date_only || holiday.end_date_only);
-  const start = literalDates ? customDatePart(startDate) : datePart(startDate, env);
-  const end = literalDates ? customDatePart(endDate) : (datePart(endDate, env) || start);
-  return Boolean(start && end && start <= date && date <= end);
 }
 
 async function handleDateOnlyTaskLoad(payload, env) {
@@ -1010,65 +879,11 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   }));
 }
 
-function normalizeHoliday(holiday, date, allowedAgentIds, env) {
-  const sourceId = holiday.holid ?? holiday.id ?? holiday.guid;
-  if (!sourceId) return [];
-
-  const rawAgentIds = splitAgentIds(holiday.agent_id ?? holiday.agentid).filter(agentId => agentId !== "0");
-  let agentIds = rawAgentIds.filter(agentId => allowedAgentIds.includes(agentId));
-  if (!rawAgentIds.length && allowedAgentIds.length) agentIds = allowedAgentIds;
-  if (!agentIds.length) return [];
-
-  const startDate = holiday.date_datetime || holiday.date || holiday.date_only || date;
-  const endDate = holiday.end_date || holiday.end_date_only || startDate;
-  const allDay = isTrue(holiday.allday) || Boolean(holiday.date_only || holiday.end_date_only);
-  const startTime = timePart(startDate, env) || "00:00";
-  const duration = allDay ? 1440 : durationMinutes(startDate, endDate);
-  const kind = allDay ? "allDay" : "timed";
-  const label = holiday.name || holiday.holiday_type_name || holiday.workday_name || holiday.agent_name || "Holiday / PTO";
-  const displayDate = holidayDisplayDate(holiday, date, env);
-
-  return agentIds.map(agentId => ({
-    appointmentId: `holiday:${sourceId}:${agentId}`,
-    ticketId: syntheticHolidayId(sourceId, agentId),
-    haloTicketId: null,
-    techId: agentId,
-    kind,
-    time: kind === "timed" ? startTime : undefined,
-    duration,
-    date: displayDate,
-    label: stripHtml(label),
-    completed: false,
-    availabilityBlock: true,
-    source: "haloHoliday"
-  }));
-}
-
 function appointmentDisplayDate(startDate, endDate, selectedDate, env) {
   const start = datePart(startDate, env);
   const end = datePart(endDate, env) || start;
   if (start && end && start <= selectedDate && selectedDate <= end) return selectedDate;
   return start || selectedDate;
-}
-
-function holidayDisplayDate(holiday, selectedDate, env) {
-  const startDate = holiday.date_datetime || holiday.date || holiday.date_only || selectedDate;
-  const endDate = holiday.end_date || holiday.end_date_only || startDate;
-  const literalDates = isTrue(holiday.allday) || Boolean(holiday.date_only || holiday.end_date_only);
-  const start = literalDates ? customDatePart(startDate) : datePart(startDate, env);
-  const end = literalDates ? customDatePart(endDate) : (datePart(endDate, env) || start);
-  if (start && end && start <= selectedDate && selectedDate <= end) return selectedDate;
-  return start || selectedDate;
-}
-
-function syntheticHolidayId(sourceId, agentId) {
-  const input = `holiday:${sourceId}:${agentId}`;
-  let hash = 0;
-  for (let index = 0; index < input.length; index += 1) {
-    hash = ((hash << 5) - hash) + input.charCodeAt(index);
-    hash |= 0;
-  }
-  return -Math.abs(hash || 1);
 }
 
 function summarizeRawAppointment(appointment) {
@@ -1093,27 +908,6 @@ function summarizeRawAppointment(appointment) {
     start: appointmentDateValue(appointment, "start"),
     end: appointmentDateValue(appointment, "end"),
     allday: appointment.allday ?? appointment.all_day ?? appointment.isallday ?? appointment.is_all_day
-  };
-}
-
-function summarizeRawHoliday(holiday) {
-  return {
-    id: holiday.id,
-    holid: holiday.holid,
-    name: holiday.name,
-    workday_name: holiday.workday_name,
-    workday_id: holiday.workday_id,
-    agent_id: holiday.agent_id,
-    agent_name: holiday.agent_name,
-    date: holiday.date,
-    date_only: holiday.date_only,
-    date_datetime: holiday.date_datetime,
-    end_date: holiday.end_date,
-    end_date_only: holiday.end_date_only,
-    allday: holiday.allday,
-    duration: holiday.duration,
-    holiday_type: holiday.holiday_type,
-    approval_status: holiday.approval_status
   };
 }
 
