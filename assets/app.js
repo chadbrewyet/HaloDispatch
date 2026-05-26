@@ -1799,6 +1799,7 @@ const technicians = [
       wireZoneExpanders();
       wireTechGroupToggles();
       makeTicketsDraggable();
+      wireAppointmentResizers();
     }
 
     function renderTechColumn(tech) {
@@ -2110,10 +2111,12 @@ const technicians = [
       const durationSlots = Math.max(1, Math.ceil((item.duration || 30) / 30));
       const draggable = item.availabilityBlock ? "false" : "true";
       const prefix = item.haloTicketId ? `#${item.ticketId} ` : "";
+      const resizeHandle = !item.availabilityBlock && item.appointmentId ? `<span class="appointment-resize-handle" data-resize-appointment="${item.appointmentId}" title="Resize appointment"></span>` : "";
       return `
         <div class="appointment ${count > 1 ? "overlap-card" : ""} ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};--duration-slots:${durationSlots};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
           <strong>${prefix}${escapeHtml(item.label || ticket?.title || "Appointment")}</strong>
           <span>${escapeHtml(formatTime(item.time))} - ${item.duration || 30}m</span>
+          ${resizeHandle}
         </div>
       `;
     }
@@ -2316,6 +2319,70 @@ const technicians = [
       });
     }
 
+    function wireAppointmentResizers() {
+      document.querySelectorAll(".appointment-resize-handle").forEach(handle => {
+        handle.addEventListener("pointerdown", startAppointmentResize);
+      });
+    }
+
+    function startAppointmentResize(event) {
+      event.preventDefault();
+      event.stopPropagation();
+      const card = event.target.closest(".appointment");
+      if (!card) return;
+      const item = state.boardItems.find(entry => String(entry.appointmentId || "") === String(card.dataset.appointmentId || ""));
+      if (!item || item.kind !== "timed" || item.availabilityBlock) return;
+      if (!item.appointmentId) {
+        toast("Appointment not loaded", "The appointment needs a Halo appointment ID before it can be resized.");
+        return;
+      }
+
+      const grid = card.closest(".slot-grid");
+      const firstSlot = grid?.querySelector(".time-slot");
+      const slotSize = state.orientation === "vertical"
+        ? (firstSlot?.getBoundingClientRect().width || 160)
+        : (firstSlot?.getBoundingClientRect().height || 40);
+      const startPointer = state.orientation === "vertical" ? event.clientX : event.clientY;
+      const startDuration = Number(item.duration || 30);
+      const snapshot = snapshotDispatchState();
+      let nextDuration = startDuration;
+
+      card.setPointerCapture?.(event.pointerId);
+      card.classList.add("resizing");
+
+      const onMove = moveEvent => {
+        const pointer = state.orientation === "vertical" ? moveEvent.clientX : moveEvent.clientY;
+        const deltaSlots = Math.round((pointer - startPointer) / slotSize);
+        nextDuration = clampAppointmentDuration(item, startDuration + (deltaSlots * 30));
+        item.duration = nextDuration;
+        card.style.setProperty("--duration-slots", Math.max(1, Math.ceil(nextDuration / 30)));
+        const label = card.querySelector("span:not(.appointment-resize-handle)");
+        if (label) label.textContent = `${formatTime(item.time)} - ${nextDuration}m`;
+      };
+
+      const onEnd = async endEvent => {
+        card.releasePointerCapture?.(endEvent.pointerId);
+        card.classList.remove("resizing");
+        window.removeEventListener("pointermove", onMove);
+        window.removeEventListener("pointerup", onEnd);
+        if (nextDuration === startDuration) {
+          item.duration = startDuration;
+          renderBoard();
+          return;
+        }
+        await resizeScheduledAppointment(item, nextDuration, snapshot);
+      };
+
+      window.addEventListener("pointermove", onMove);
+      window.addEventListener("pointerup", onEnd, { once: true });
+    }
+
+    function clampAppointmentDuration(item, duration) {
+      const start = timeToMinutes(item.time || "00:00");
+      const maxDuration = Math.max(30, calendarEndMinutes() - start);
+      return Math.max(30, Math.min(maxDuration, duration));
+    }
+
     function clearTicketAttention(ticketId, options = {}) {
       if (!attentionTicketIds.delete(Number(ticketId))) return;
       if (options.render === false) return;
@@ -2503,6 +2570,28 @@ const technicians = [
       }, { quiet: true }), {
         successTitle: "Appointment updated",
         successMessage: `#${ticketId} moved to ${targetLabel}${techChanged}.`,
+        refreshAppointments: true
+      });
+      renderAll();
+    }
+
+    async function resizeScheduledAppointment(item, nextDuration, snapshot) {
+      const ticket = tickets.find(entry => entry.id === item.ticketId);
+      item.duration = nextDuration;
+      await persistOptimisticChange(snapshot, callHalo("updateAppointment", {
+        ticketId: item.haloTicketId || ticket?.haloTicketId || null,
+        previousTechnicianId: item.techId,
+        technicianId: item.techId,
+        previousStartTime: item.time || null,
+        startTime: item.time,
+        durationMinutes: nextDuration,
+        appointmentId: item.appointmentId || null,
+        date: item.date || selectedDate(),
+        allday: false,
+        assignTicket: false
+      }, { quiet: true }), {
+        successTitle: "Appointment resized",
+        successMessage: `${item.label || ticket?.title || "Appointment"} is now ${formatDurationShort(nextDuration)}.`,
         refreshAppointments: true
       });
       renderAll();

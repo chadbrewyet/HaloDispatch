@@ -1486,6 +1486,41 @@
       z-index: 2;
     }
 
+    .appointment.resizing {
+      cursor: ns-resize;
+      outline: 2px solid var(--accent);
+      outline-offset: -2px;
+      user-select: none;
+    }
+
+    .appointment-resize-handle {
+      position: absolute;
+      inset: auto 8px 3px 8px;
+      height: 8px;
+      border-radius: 999px;
+      cursor: ns-resize;
+      opacity: 0;
+      background: color-mix(in srgb, var(--ink) 35%, transparent);
+      transition: opacity 0.12s ease;
+      touch-action: none;
+    }
+
+    .appointment:hover .appointment-resize-handle,
+    .appointment.resizing .appointment-resize-handle {
+      opacity: 0.75;
+    }
+
+    .board.vertical .appointment-resize-handle {
+      inset: 8px 3px 8px auto;
+      width: 8px;
+      height: auto;
+      cursor: ew-resize;
+    }
+
+    .board.vertical .appointment.resizing {
+      cursor: ew-resize;
+    }
+
     .board.horizontal .appointment {
       min-height: calc((var(--duration-slots, 1) * var(--slot-height)) - 8px);
     }
