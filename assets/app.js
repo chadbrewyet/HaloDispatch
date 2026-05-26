@@ -412,6 +412,20 @@ const technicians = [
       resetTicketRefreshTimer();
     }
 
+    function hydrateListFiltersFromSavedFilters() {
+      Object.entries(state.listFilters || {}).forEach(([key, filter]) => {
+        const saved = state.savedFilters?.[filter?.name];
+        if (!saved) return;
+        const currentConditions = filterConditions(filter);
+        if (currentConditions.length) return;
+        state.listFilters[key] = normalizeFilterShape({
+          ...saved,
+          name: saved.name || filter.name,
+          title: saved.title || filter.title || saved.name || filter.name
+        });
+      });
+    }
+
     function currentStorageAgentId() {
       return String(state.currentAgentId || "").trim();
     }
@@ -1451,8 +1465,8 @@ const technicians = [
       const filter = state.savedFilters[name];
       if (!filter || !state.draftFilter) return;
       state.draftFilter = {
-        name: state.draftFilter.name,
-        title: state.draftFilter.title || filter.title || name,
+        name: filter.name || name,
+        title: filter.title || filter.name || name,
         color: filter.color || state.draftFilter.color || "#1976a3",
         includeAssigned: Boolean(filter.includeAssigned),
         conditions: structuredClone(filterConditions(filter))
@@ -1470,6 +1484,7 @@ const technicians = [
       state.draftFilter.includeAssigned = $("filterIncludeAssignedCheck").checked;
       state.listFilters[state.activeFilterListKey] = normalizeFilterShape(state.draftFilter);
       saveLocalSettings();
+      saveHaloUserPreferences({ quiet: true });
       closeFilterModal();
       renderReportLists();
     }
@@ -1650,16 +1665,15 @@ const technicians = [
 
     function applySavedFilterToList(key, name) {
       if (!name || !state.savedFilters[name]) return;
-      state.listFilters[key] = {
-        name,
-        title: state.savedFilters[name].title || name,
-        color: state.savedFilters[name].color || "#1976a3",
-        includeAssigned: Boolean(state.savedFilters[name].includeAssigned),
-        values: structuredClone(state.savedFilters[name].values || {}),
-        modes: structuredClone(state.savedFilters[name].modes || {}),
-        conditions: structuredClone(filterConditions(state.savedFilters[name]))
-      };
+      const saved = state.savedFilters[name];
+      state.listFilters[key] = normalizeFilterShape({
+        ...saved,
+        name: saved.name || name,
+        title: saved.title || saved.name || name,
+        conditions: structuredClone(filterConditions(saved))
+      });
       saveLocalSettings();
+      saveHaloUserPreferences({ quiet: true });
       renderReportLists();
     }
 
@@ -2566,11 +2580,16 @@ const technicians = [
         const preferences = result.data?.userPreferences?.preferences;
         if (preferences && Object.keys(preferences).length) {
           applyDispatchPreferencePayload(preferences);
+          state.savedFilters = savedFilters;
+          hydrateListFiltersFromSavedFilters();
+          renderDeleteFilterSelect();
+          renderReportLists();
           if (!options.skipReload) {
             loadHaloTickets({ quiet: true });
             loadHaloAppointments({ quiet: true });
           }
         } else {
+          hydrateListFiltersFromSavedFilters();
           renderDeleteFilterSelect();
           renderReportLists();
         }
