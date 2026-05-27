@@ -1055,6 +1055,12 @@
       outline-offset: -3px;
     }
 
+    .report-list.list-over,
+    .zone-items.order-over {
+      outline: 2px solid var(--accent);
+      outline-offset: -3px;
+    }
+
     .board.vertical .tech-column {
       grid-template-columns: 132px 210px minmax(0, 1fr);
       grid-template-rows: minmax(238px, 1fr);

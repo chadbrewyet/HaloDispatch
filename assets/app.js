@@ -51,6 +51,7 @@ const technicians = [
       activeTechEditId: null,
       techThemes: {},
       collapsedTechGroups: {},
+      noTimeTaskOrder: {},
       sectionSizes: {},
       ticketPanelPinned: false,
       ticketPanelOpen: false,
@@ -310,6 +311,8 @@ const technicians = [
         if (saved.techThemes) state.techThemes = saved.techThemes;
         if (saved.openFilterFields) state.openFilterFields = saved.openFilterFields;
         if (saved.collapsedTechGroups) state.collapsedTechGroups = saved.collapsedTechGroups;
+        if (saved.noTimeTaskOrder) state.noTimeTaskOrder = saved.noTimeTaskOrder;
+        normalizeNoTimeTaskOrder();
         if (saved.sectionSizes) state.sectionSizes = saved.sectionSizes;
         if (saved.ticketPanelPinned !== undefined) state.ticketPanelPinned = Boolean(saved.ticketPanelPinned);
         if (saved.ticketPanelWidth) state.ticketPanelWidth = Number(saved.ticketPanelWidth);
@@ -353,6 +356,7 @@ const technicians = [
         techThemes: state.techThemes,
         openFilterFields: state.openFilterFields,
         collapsedTechGroups: state.collapsedTechGroups,
+        noTimeTaskOrder: state.noTimeTaskOrder,
         sectionSizes: state.sectionSizes,
         ticketPanelPinned: state.ticketPanelPinned,
         ticketPanelWidth: state.ticketPanelWidth,
@@ -387,6 +391,7 @@ const technicians = [
         selectedListFilterFields: state.selectedListFilterFields,
         techThemes: state.techThemes,
         collapsedTechGroups: state.collapsedTechGroups,
+        noTimeTaskOrder: state.noTimeTaskOrder,
         sectionSizes: state.sectionSizes,
         ticketPanelPinned: state.ticketPanelPinned,
         ticketPanelWidth: state.ticketPanelWidth,
@@ -405,7 +410,6 @@ const technicians = [
         const key = sectionKey(index);
         return {
           reportId,
-          view: state.listViews[key] || "card",
           collapsed: Boolean(state.collapsedLists[key]),
           filter: normalizeFilterShape(ensureListFilter(key))
         };
@@ -420,7 +424,6 @@ const technicians = [
       state.listFilters = {};
       lists.forEach((list, index) => {
         const key = sectionKey(index);
-        state.listViews[key] = list.view || "card";
         state.collapsedLists[key] = Boolean(list.collapsed);
         state.listFilters[key] = normalizeFilterShape(list.filter || {});
       });
@@ -450,6 +453,7 @@ const technicians = [
       };
       Object.assign(state, preferences, keepConnection);
       state.visibleFields = normalizeVisibleFields(preferences.visibleFields);
+      normalizeNoTimeTaskOrder();
       if (Array.isArray(preferences.ticketLists) && preferences.ticketLists.length) {
         applyTicketListPayload(preferences.ticketLists);
       } else {
@@ -474,6 +478,12 @@ const technicians = [
       renderBoard();
       resetAppointmentRefreshTimer();
       resetTicketRefreshTimer();
+    }
+
+    function normalizeNoTimeTaskOrder() {
+      if (!state.noTimeTaskOrder || typeof state.noTimeTaskOrder !== "object" || Array.isArray(state.noTimeTaskOrder)) {
+        state.noTimeTaskOrder = {};
+      }
     }
 
     function hydrateListFiltersFromSavedFilters() {
@@ -942,6 +952,7 @@ const technicians = [
           removeTicketList(Number(button.dataset.index));
         });
       });
+      wireTicketListReordering();
       $("reportLists").querySelectorAll("[data-filter-toggle]").forEach(button => {
         button.addEventListener("click", event => {
           event.stopPropagation();
@@ -1018,6 +1029,47 @@ const technicians = [
       renderReportLists();
     }
 
+    function wireTicketListReordering() {
+      $("reportLists").querySelectorAll("[data-list-drag-index]").forEach(header => {
+        header.addEventListener("dragstart", event => {
+          if (event.target.closest(".report-actions, button, input, select, details, a")) {
+            event.preventDefault();
+            return;
+          }
+          event.dataTransfer.setData("ticket-list-index", header.dataset.listDragIndex);
+          event.dataTransfer.effectAllowed = "move";
+        });
+      });
+      $("reportLists").querySelectorAll("[data-report-list-index]").forEach(list => {
+        list.addEventListener("dragover", event => {
+          if (!event.dataTransfer.types.includes("ticket-list-index")) return;
+          event.preventDefault();
+          list.classList.add("list-over");
+        });
+        list.addEventListener("dragleave", () => list.classList.remove("list-over"));
+        list.addEventListener("drop", event => {
+          const fromIndex = Number(event.dataTransfer.getData("ticket-list-index"));
+          const toIndex = Number(list.dataset.reportListIndex);
+          if (!Number.isInteger(fromIndex) || !Number.isInteger(toIndex)) return;
+          event.preventDefault();
+          list.classList.remove("list-over");
+          reorderTicketLists(fromIndex, toIndex);
+        });
+      });
+    }
+
+    function reorderTicketLists(fromIndex, toIndex) {
+      if (fromIndex === toIndex) return;
+      const lists = ticketListPayload();
+      const [moved] = lists.splice(fromIndex, 1);
+      if (!moved) return;
+      lists.splice(toIndex, 0, moved);
+      applyTicketListPayload(lists);
+      saveLocalSettings();
+      saveHaloUserPreferences({ quiet: true });
+      renderReportLists();
+    }
+
     function renderReportList(reportId, index) {
       const report = reports.find(item => item.id === reportId) || reports[0];
       const listTickets = filteredTicketsForList(reportId, index);
@@ -1028,8 +1080,8 @@ const technicians = [
       const themeStyle = listThemeStyle(listFilter.color);
       const hasAttention = listTickets.some(ticket => attentionTicketIds.has(Number(ticket.id)));
       return `
-        <section class="report-list ${collapsed ? "collapsed" : ""} ${hasAttention ? "has-new-ticket" : ""}" ${themeStyle}>
-          <header data-list-header="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">
+        <section class="report-list ${collapsed ? "collapsed" : ""} ${hasAttention ? "has-new-ticket" : ""}" data-report-list-index="${index}" ${themeStyle}>
+          <header data-list-header="${key}" data-list-drag-index="${index}" draggable="true" title="${collapsed ? "Expand list" : "Collapse list"}">
             <div class="report-name">${escapeHtml(title)} <span class="count-badge" title="${listTickets.length} open tickets">${listTickets.length}</span></div>
             <div class="report-actions">
               <button class="icon" data-filter-toggle="${key}" title="Edit ticket list">${pencilIconSvg()}</button>
@@ -1835,6 +1887,7 @@ const technicians = [
       wireZoneExpanders();
       wireTechGroupToggles();
       makeTicketsDraggable();
+      wireNoTimeTaskReordering();
       wireAppointmentResizers();
     }
 
@@ -1842,8 +1895,9 @@ const technicians = [
       const visibleItems = state.boardItems.filter(item => String(item.techId) === String(tech.id) && isSelectedDate(item.date));
       const pastNoTime = state.boardItems.filter(item => String(item.techId) === String(tech.id) && item.kind === "pastNoTime" && String(item.date || "") < selectedDate());
       const allDay = visibleItems.filter(item => item.kind === "allDay");
-      const noTime = visibleItems.filter(item => item.kind === "noTime");
+      const noTime = sortNoTimeItems(visibleItems.filter(item => item.kind === "noTime"), tech.id, "noTime");
       const timed = visibleItems.filter(item => item.kind === "timed");
+      const orderedPastNoTime = sortNoTimeItems(pastNoTime, tech.id, "pastNoTime");
       const allDayBlocked = allDay.some(item => item.availabilityBlock);
       const scheduleKey = techGroupKey(tech.id, "schedule");
       const noTimeKey = techGroupKey(tech.id, "noTime");
@@ -1869,8 +1923,8 @@ const technicians = [
               ${scheduleCollapsed ? "" : renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
               ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
               ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
-              ${pastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", pastNoTime.length, "alert") : ""}
-              ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
+              ${orderedPastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", orderedPastNoTime.length, "alert") : ""}
+              ${orderedPastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, orderedPastNoTime) : ""}
             </div>
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
               <div class="calendar" data-calendar-tech-id="${tech.id}">
@@ -1901,8 +1955,8 @@ const technicians = [
           `}
           ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
           ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
-          ${pastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", pastNoTime.length, "alert") : ""}
-          ${pastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, pastNoTime) : ""}
+          ${orderedPastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", orderedPastNoTime.length, "alert") : ""}
+          ${orderedPastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, orderedPastNoTime) : ""}
         </section>
       `;
     }
@@ -2017,6 +2071,7 @@ const technicians = [
 
     function renderTaskZone(kind, techId, techName, label, items, emptyText) {
       const showInlineLabel = kind !== "noTime";
+      const orderAttrs = kind === "noTime" ? `data-no-time-order-zone data-order-kind="noTime" data-tech-id="${techId}"` : "";
       return `
         <div class="drop-zone" data-drop-kind="${kind}" data-tech-id="${techId}">
           <div class="expanded-title">${escapeHtml(label)} - ${escapeHtml(techName)}</div>
@@ -2024,7 +2079,7 @@ const technicians = [
             ${showInlineLabel ? `<div class="zone-label">${label}</div>` : `<div></div>`}
             <button class="expand-zone" data-expand-zone type="button" title="Expand section">^</button>
           </div>
-          <div class="zone-items">${items.length ? items.map(renderSmallEvent).join("") : `<div class="empty">${emptyText}</div>`}</div>
+          <div class="zone-items" ${orderAttrs}>${items.length ? items.map(renderSmallEvent).join("") : `<div class="empty">${emptyText}</div>`}</div>
         </div>
       `;
     }
@@ -2037,7 +2092,7 @@ const technicians = [
             <div class="zone-label">Past Tasks</div>
             <button class="expand-zone" data-expand-zone type="button" title="Expand section">^</button>
           </div>
-          <div class="zone-items">${items.map(renderSmallEvent).join("")}</div>
+          <div class="zone-items" data-no-time-order-zone data-order-kind="pastNoTime" data-tech-id="${techId}">${items.map(renderSmallEvent).join("")}</div>
         </div>
       `;
     }
@@ -2153,7 +2208,30 @@ const technicians = [
       const ticket = tickets.find(entry => entry.id === item.ticketId);
       const draggable = item.availabilityBlock ? "false" : "true";
       const prefix = item.haloTicketId ? `#${item.ticketId} ` : "";
-      return `<div class="small-event ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">${prefix}${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
+      return `<div class="small-event ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-tech-id="${item.techId}" data-date="${item.date || ""}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">${prefix}${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
+    }
+
+    function sortNoTimeItems(items, techId, kind) {
+      const order = state.noTimeTaskOrder[noTimeOrderKey(techId, kind)] || [];
+      if (!order.length) return items;
+      const rank = new Map(order.map((ticketId, index) => [String(ticketId), index]));
+      return [...items].sort((a, b) => {
+        const aRank = rank.has(String(a.ticketId)) ? rank.get(String(a.ticketId)) : Number.MAX_SAFE_INTEGER;
+        const bRank = rank.has(String(b.ticketId)) ? rank.get(String(b.ticketId)) : Number.MAX_SAFE_INTEGER;
+        if (aRank !== bRank) return aRank - bRank;
+        return items.indexOf(a) - items.indexOf(b);
+      });
+    }
+
+    function noTimeOrderKey(techId, kind) {
+      return `${kind}:${techId}:${kind === "pastNoTime" ? `past:${selectedDate()}` : selectedDate()}`;
+    }
+
+    function appendNoTimeOrder(ticketId, techId, kind) {
+      const key = noTimeOrderKey(techId, kind);
+      const order = (state.noTimeTaskOrder[key] || []).filter(id => String(id) !== String(ticketId));
+      order.push(String(ticketId));
+      state.noTimeTaskOrder[key] = order;
     }
 
     function renderAppointment(item, index = 0, count = 1, orientation = boardLayoutOrientation()) {
@@ -2247,12 +2325,14 @@ const technicians = [
     function wireDropZones() {
       document.querySelectorAll("[data-drop-kind]").forEach(zone => {
         zone.addEventListener("dragover", event => {
+          if (event.target.closest("[data-no-time-order-zone]")) return;
           if (event.dataTransfer.types.includes("tech-id")) return;
           event.preventDefault();
           zone.classList.add("over");
         });
         zone.addEventListener("dragleave", () => zone.classList.remove("over"));
         zone.addEventListener("drop", event => {
+          if (event.target.closest("[data-no-time-order-zone]")) return;
           event.preventDefault();
           zone.classList.remove("over");
           const ticketId = Number(event.dataTransfer.getData("text/plain"));
@@ -2346,6 +2426,8 @@ const technicians = [
           card.classList.add("dragging");
           event.dataTransfer.setData("text/plain", card.dataset.ticketId);
           event.dataTransfer.setData("source", card.dataset.dragSource || "ticket");
+          event.dataTransfer.setData("item-kind", card.dataset.kind || "");
+          event.dataTransfer.setData("item-tech-id", card.dataset.techId || "");
         });
         card.addEventListener("click", () => {
           clearTicketAttention(Number(card.dataset.ticketId), { render: false });
@@ -2367,6 +2449,68 @@ const technicians = [
           openTicketExternal(Number(card.dataset.ticketId));
         });
       });
+    }
+
+    function wireNoTimeTaskReordering() {
+      document.querySelectorAll("[data-no-time-order-zone]").forEach(zone => {
+        zone.addEventListener("dragover", event => {
+          if (!isNoTimeReorderDrag(event) || !canReorderNoTimeInZone(event, zone)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          zone.classList.add("order-over");
+        });
+        zone.addEventListener("dragleave", event => {
+          if (!zone.contains(event.relatedTarget)) zone.classList.remove("order-over");
+        });
+        zone.addEventListener("drop", event => {
+          if (!isNoTimeReorderDrag(event) || !canReorderNoTimeInZone(event, zone)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          zone.classList.remove("order-over");
+          const ticketId = Number(event.dataTransfer.getData("text/plain"));
+          reorderNoTimeTask(ticketId, zone, event);
+        });
+      });
+    }
+
+    function isNoTimeReorderDrag(event) {
+      const kind = event.dataTransfer.getData("item-kind");
+      return event.dataTransfer.getData("source") === "scheduled" && (kind === "noTime" || kind === "pastNoTime");
+    }
+
+    function canReorderNoTimeInZone(event, zone) {
+      const ticketId = Number(event.dataTransfer.getData("text/plain"));
+      const dragged = state.boardItems.find(item => Number(item.ticketId) === ticketId);
+      return Boolean(dragged && String(dragged.kind) === String(zone.dataset.orderKind) && String(dragged.techId) === String(zone.dataset.techId));
+    }
+
+    function reorderNoTimeTask(ticketId, zone, event) {
+      const dragged = state.boardItems.find(item => Number(item.ticketId) === Number(ticketId));
+      if (!dragged) return;
+      const targetKind = zone.dataset.orderKind;
+      const targetTechId = zone.dataset.techId;
+      if (String(dragged.kind) !== String(targetKind) || String(dragged.techId) !== String(targetTechId)) return;
+      const targetCard = event.target.closest(".small-event");
+      const targetTicketId = targetCard ? Number(targetCard.dataset.ticketId) : null;
+      const orderKey = noTimeOrderKey(targetTechId, targetKind);
+      const currentIds = sortNoTimeItems(
+        state.boardItems.filter(item => String(item.techId) === String(targetTechId) && item.kind === targetKind && (targetKind === "pastNoTime" ? String(item.date || "") < selectedDate() : isSelectedDate(item.date))),
+        targetTechId,
+        targetKind
+      ).map(item => Number(item.ticketId));
+      const nextOrder = currentIds.filter(id => id !== ticketId);
+      if (targetTicketId && targetTicketId !== ticketId) {
+        const targetIndex = nextOrder.indexOf(targetTicketId);
+        const rect = targetCard.getBoundingClientRect();
+        const insertAfter = event.clientY > rect.top + (rect.height / 2);
+        nextOrder.splice(targetIndex + (insertAfter ? 1 : 0), 0, ticketId);
+      } else {
+        nextOrder.push(ticketId);
+      }
+      state.noTimeTaskOrder[orderKey] = nextOrder.map(String);
+      saveLocalSettings();
+      saveHaloUserPreferences({ quiet: true });
+      renderBoard();
     }
 
     function wireAppointmentResizers() {
@@ -2494,6 +2638,7 @@ const technicians = [
       if (kind === "noTime") {
         ticket.dateField = selectedDate();
         state.boardItems.push({ ticketId, techId, kind: "noTime", label: ticket.title, date: selectedDate() });
+        appendNoTimeOrder(ticketId, techId, "noTime");
         renderAll();
         await persistOptimisticChange(snapshot, callHalo(source === "scheduled" ? "moveToDateOnlyTask" : "assignTicketDateOnly", { ticketId, technicianId: techId, dateFieldValue: $("boardDate").value }, { quiet: true }), {
           successTitle: source === "scheduled" ? "Task moved" : "Date-only task queued",
@@ -2531,6 +2676,7 @@ const technicians = [
         date: selectedDate(),
         source: "haloDateOnly"
       });
+      appendNoTimeOrder(ticketId, techId, "noTime");
       renderAll();
 
       const action = item.appointmentId ? "moveAppointmentToDateOnly" : "assignTicketDateOnly";
