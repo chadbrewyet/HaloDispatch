@@ -851,6 +851,7 @@
       padding: 5px 8px;
       display: grid;
       align-items: center;
+      border: 1px solid color-mix(in srgb, #fff 52%, transparent);
     }
 
     .ticket-status-cell.sla { background: var(--ticket-sla-color); }
@@ -877,14 +878,17 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
-    .ticket-card-row:first-of-type {
-      grid-template-columns: minmax(0, 0.3fr) minmax(0, 0.7fr);
+    .ticket-card-row.primary-row {
+      grid-template-columns: minmax(0, 0.25fr) minmax(0, 0.75fr);
     }
 
     .ticket-value {
       min-width: 0;
       display: grid;
       align-items: start;
+      border: 1px solid color-mix(in srgb, var(--line-strong) 72%, transparent);
+      border-radius: 4px;
+      padding: 3px 5px;
     }
 
     .ticket-value:nth-child(even) { text-align: right; }
@@ -903,7 +907,7 @@
       font-weight: 950;
     }
 
-    .ticket-card-row:nth-of-type(3) .ticket-value strong {
+    .ticket-card-row.meta-row .ticket-value strong {
       font-size: 11px;
       font-weight: 500;
     }

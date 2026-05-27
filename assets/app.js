@@ -371,6 +371,7 @@ const technicians = [
     }
 
     function dispatchPreferencePayload() {
+      state.visibleFields = normalizeVisibleFields(state.visibleFields);
       return {
         visibleFields: state.visibleFields,
         colorBy: state.colorBy,
@@ -449,6 +450,7 @@ const technicians = [
         currentAgentId: state.currentAgentId
       };
       Object.assign(state, preferences, keepConnection);
+      state.visibleFields = normalizeVisibleFields(preferences.visibleFields);
       if (Array.isArray(preferences.ticketLists) && preferences.ticketLists.length) {
         applyTicketListPayload(preferences.ticketLists);
       } else {
@@ -1778,15 +1780,15 @@ const technicians = [
         renderTicketCardRow([
           visible.has("ticketNumber") ? renderTicketValue("Ticket #", `#${ticket.id}`, "ticket-number") : "",
           visible.has("summary") ? renderTicketValue("Summary", ticket.title, "summary") : ""
-        ]),
+        ], "primary-row"),
         renderTicketCardRow([
           visible.has("client") ? renderTicketValue("Client", ticket.client) : "",
           visible.has("site") ? renderTicketValue("Site", ticket.site) : ""
-        ]),
+        ], "client-row"),
         renderTicketCardRow([
           visible.has("contact") ? renderTicketValue("Contact", ticket.contact) : "",
           visible.has("type") ? renderTicketValue("Ticket Type", ticket.type) : ""
-        ])
+        ], "meta-row")
       ].filter(Boolean).join("");
       return `
         <article class="ticket-card ${attentionClass}" draggable="true" data-ticket-id="${ticket.id}" data-drag-source="ticket" ${ticketStatusStyle(ticket)}>
@@ -1796,10 +1798,10 @@ const technicians = [
       `;
     }
 
-    function renderTicketCardRow(cells) {
+    function renderTicketCardRow(cells, className = "") {
       const visibleCells = cells.filter(Boolean);
       if (!visibleCells.length) return "";
-      return `<div class="ticket-card-row cols-${visibleCells.length}">${visibleCells.join("")}</div>`;
+      return `<div class="ticket-card-row ${className} cols-${visibleCells.length}">${visibleCells.join("")}</div>`;
     }
 
     function renderTicketValue(label, value, tone = "") {

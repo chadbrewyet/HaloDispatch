@@ -27,8 +27,8 @@ const DEFAULT_PAGE_SIZE = 100;
 const DEFAULT_MAX_PAGES = 50;
 const DEFAULT_USER_PREF_TABLE_ID = 1013;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
-const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
-const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
+const DEFAULT_USER_PREF_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
+const DEFAULT_SAVED_FILTER_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const WORKER_BUILD = "2026-05-24-field-mapping";
 
 export default {
@@ -1671,7 +1671,8 @@ function normalizeUserPreferenceRows(rows, agentId, env) {
         theme: payload.theme ?? readRowValue(row, fields.prefTheme),
         orientation: payload.orientation ?? readRowValue(row, fields.prefOrientation),
         selectedTeams: payload.selectedTeams ?? parseStorageJson(readRowValue(row, fields.prefSelectedTeams), []),
-        selectedTechs: payload.selectedTechs ?? parseStorageJson(readRowValue(row, fields.prefSelectedAgents), [])
+        selectedTechs: payload.selectedTechs ?? parseStorageJson(readRowValue(row, fields.prefSelectedAgents), []),
+        visibleFields: Array.isArray(payload.visibleFields) ? payload.visibleFields : []
       })
     };
   }
