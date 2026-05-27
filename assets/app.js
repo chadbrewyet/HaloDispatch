@@ -108,8 +108,7 @@ const technicians = [
 
     async function init() {
       document.body.classList.add("booting");
-      const today = new Date();
-      $("boardDate").value = today.toISOString().slice(0, 10);
+      $("boardDate").value = todayDateKey();
       state.boardItems.forEach(item => {
         if (!item.date) item.date = $("boardDate").value;
         const ticket = tickets.find(entry => entry.id === item.ticketId);
@@ -189,7 +188,7 @@ const technicians = [
       $("prevDay").addEventListener("click", () => shiftDate(-1));
       $("nextDay").addEventListener("click", () => shiftDate(1));
       $("todayBtn").addEventListener("click", () => {
-        $("boardDate").value = new Date().toISOString().slice(0, 10);
+        $("boardDate").value = todayDateKey();
         state.shouldCenterNow = true;
         renderAll();
         loadHaloAppointments({ showLoading: true });
@@ -1237,7 +1236,7 @@ const technicians = [
       const text = String(value).trim();
       if (/^\d{4}-\d{2}-\d{2}/.test(text)) return text.slice(0, 10);
       const date = new Date(text);
-      return Number.isFinite(date.getTime()) ? date.toISOString().slice(0, 10) : "";
+      return Number.isFinite(date.getTime()) ? localDateKey(date) : "";
     }
 
     function listThemeStyle(color = "#1976a3") {
@@ -2814,7 +2813,7 @@ const technicians = [
     function shiftDate(days) {
       const date = new Date(`${$("boardDate").value}T00:00:00`);
       date.setDate(date.getDate() + days);
-      $("boardDate").value = date.toISOString().slice(0, 10);
+      $("boardDate").value = localDateKey(date);
       state.shouldCenterNow = true;
       renderAll();
       loadHaloAppointments({ showLoading: true });
@@ -3436,7 +3435,11 @@ const technicians = [
     }
 
     function isTodaySelected() {
-      return selectedDate() === new Date().toISOString().slice(0, 10);
+      return selectedDate() === todayDateKey();
+    }
+
+    function todayDateKey() {
+      return localDateKey(new Date());
     }
 
     function toast(title, message) {
