@@ -29,7 +29,7 @@ const technicians = [
       selectedTicketTypes: [],
       orientation: "horizontal",
       reportLists: ["api-open"],
-      visibleFields: ["client", "sla", "estimate"],
+      visibleFields: ["ticketNumber", "summary", "client", "site", "contact", "type", "sla", "priority"],
       workingHours: [7, 17],
       calendarStartTime: "07:00",
       calendarEndTime: "17:00",
@@ -79,12 +79,14 @@ const technicians = [
     };
 
     const fieldOptions = [
+      { key: "ticketNumber", label: "Ticket #" },
+      { key: "summary", label: "Summary" },
       { key: "client", label: "Client" },
       { key: "site", label: "Site" },
-      { key: "sla", label: "SLA" },
-      { key: "estimate", label: "Estimate" },
       { key: "contact", label: "Contact" },
-      { key: "type", label: "Type" }
+      { key: "type", label: "Ticket Type" },
+      { key: "sla", label: "SLO Time Remaining" },
+      { key: "priority", label: "Priority" }
     ];
 
     const listFilterFieldOptions = [
@@ -190,12 +192,12 @@ const technicians = [
         $("boardDate").value = new Date().toISOString().slice(0, 10);
         state.shouldCenterNow = true;
         renderAll();
-        loadHaloAppointments();
+        loadHaloAppointments({ showLoading: true });
       });
       $("boardDate").addEventListener("change", () => {
         state.shouldCenterNow = true;
         renderAll();
-        loadHaloAppointments();
+        loadHaloAppointments({ showLoading: true });
       });
       $("show24HoursCheck").addEventListener("change", () => {
         state.show24Hours = $("show24HoursCheck").checked;
@@ -275,7 +277,7 @@ const technicians = [
     function loadLocalSettings() {
       try {
         const saved = JSON.parse(localStorage.getItem("dispatchBoardSettings") || "{}");
-        if (saved.visibleFields) state.visibleFields = saved.visibleFields;
+        if (saved.visibleFields) state.visibleFields = normalizeVisibleFields(saved.visibleFields);
         if (saved.colorBy) {
           state.colorBy = saved.colorBy;
           $("colorBySelect").value = saved.colorBy;
@@ -883,6 +885,7 @@ const technicians = [
     }
 
     function renderFieldChecks() {
+      state.visibleFields = normalizeVisibleFields(state.visibleFields);
       $("fieldSummary").textContent = summaryText(state.visibleFields.length, fieldOptions.length, "field", "fields");
       $("fieldChecks").innerHTML = fieldOptions.map(option => `
         <label class="agent-option">
@@ -898,6 +901,19 @@ const technicians = [
           renderReportLists();
         });
       });
+    }
+
+    function normalizeVisibleFields(fields) {
+      const allowed = new Set(fieldOptions.map(option => option.key));
+      const source = Array.isArray(fields) ? fields : [];
+      const mapped = source
+        .map(field => field === "title" ? "summary" : field)
+        .filter(field => allowed.has(field));
+      const normalized = Array.from(new Set(mapped));
+      if (source.includes("estimate")) {
+        return Array.from(new Set(["ticketNumber", "summary", ...normalized]));
+      }
+      return normalized;
     }
 
     function renderReportLists() {
@@ -922,22 +938,6 @@ const technicians = [
         button.addEventListener("click", event => {
           event.stopPropagation();
           removeTicketList(Number(button.dataset.index));
-        });
-      });
-      $("reportLists").querySelectorAll("[data-list-view]").forEach(button => {
-        button.addEventListener("click", () => {
-          state.listViews[sectionKey(Number(button.dataset.index))] = button.dataset.view;
-          saveLocalSettings();
-          renderReportLists();
-        });
-      });
-      $("reportLists").querySelectorAll("[data-list-view-toggle]").forEach(button => {
-        button.addEventListener("click", event => {
-          event.stopPropagation();
-          const key = sectionKey(Number(button.dataset.index));
-          state.listViews[key] = (state.listViews[key] || "card") === "card" ? "list" : "card";
-          saveLocalSettings();
-          renderReportLists();
         });
       });
       $("reportLists").querySelectorAll("[data-filter-toggle]").forEach(button => {
@@ -1020,7 +1020,6 @@ const technicians = [
       const report = reports.find(item => item.id === reportId) || reports[0];
       const listTickets = filteredTicketsForList(reportId, index);
       const key = sectionKey(index);
-      const view = state.listViews[key] || "card";
       const collapsed = Boolean(state.collapsedLists[key]);
       const listFilter = ensureListFilter(key);
       const title = listFilter.title || listFilter.name || report.name;
@@ -1031,7 +1030,6 @@ const technicians = [
           <header data-list-header="${key}" title="${collapsed ? "Expand list" : "Collapse list"}">
             <div class="report-name">${escapeHtml(title)} <span class="count-badge" title="${listTickets.length} open tickets">${listTickets.length}</span></div>
             <div class="report-actions">
-              <button class="icon" data-list-view-toggle data-index="${index}" title="${view === "card" ? "Switch to list view" : "Switch to card view"}">${view === "card" ? squareIconSvg() : listIconSvg()}</button>
               <button class="icon" data-filter-toggle="${key}" title="Edit ticket list">${pencilIconSvg()}</button>
               <button class="icon danger-icon" data-remove-list data-index="${index}" title="Remove list">x</button>
             </div>
@@ -1039,8 +1037,8 @@ const technicians = [
               ${state.openFilterMenu === key ? renderTicketFilterMenu(key) : ""}
             </div>
           </header>
-          <div class="ticket-stack ${view === "list" ? "list-view" : "card-view"}">
-            ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, view, !collapsed)).join("") : `<div class="empty">No tickets in this list.</div>`}
+          <div class="ticket-stack card-view">
+            ${listTickets.length ? listTickets.map(ticket => renderTicketCard(ticket, !collapsed)).join("") : `<div class="empty">No tickets in this list.</div>`}
           </div>
         </section>
       `;
@@ -1768,29 +1766,66 @@ const technicians = [
       renderReportLists();
     }
 
-    function renderTicketCard(ticket, view = "card", listExpanded = true) {
-      const visible = state.visibleFields.map(field => {
-        if (!ticket[field]) return "";
-        return `<div class="ticket-line"><span>${labelFor(field)}</span><strong>${escapeHtml(ticket[field])}</strong></div>`;
-      }).join("");
+    function renderTicketCard(ticket, listExpanded = true) {
+      const visible = new Set(state.visibleFields);
       const attentionClass = listExpanded && attentionTicketIds.has(Number(ticket.id)) ? "new-ticket-attention" : "";
+      const topFields = [
+        visible.has("sla") ? renderTicketStatusCell("SLO Time Left", ticket.sla || "None", "sla") : "",
+        visible.has("priority") ? renderTicketStatusCell("Priority", ticket.priority || "None", "priority-status") : ""
+      ].filter(Boolean).join("");
+      const rows = [
+        renderTicketCardRow([
+          visible.has("ticketNumber") ? renderTicketValue("Ticket #", `#${ticket.id}`, "ticket-number") : "",
+          visible.has("summary") ? renderTicketValue("Summary", ticket.title, "summary") : ""
+        ]),
+        renderTicketCardRow([
+          visible.has("client") ? renderTicketValue("Client", ticket.client) : "",
+          visible.has("site") ? renderTicketValue("Site", ticket.site) : ""
+        ]),
+        renderTicketCardRow([
+          visible.has("contact") ? renderTicketValue("Contact", ticket.contact) : "",
+          visible.has("type") ? renderTicketValue("Ticket Type", ticket.type) : ""
+        ])
+      ].filter(Boolean).join("");
       return `
-        <article class="ticket-card ${ticketColorClass(ticket)} ${view === "list" ? "list-mode" : ""} ${attentionClass}" draggable="true" data-ticket-id="${ticket.id}" data-drag-source="ticket">
-          <div class="ticket-top">
-            <span class="ticket-id">#${ticket.id}</span>
-            <span class="priority ${ticket.priority.toLowerCase()}">${ticket.priority}</span>
-          </div>
-          <div class="ticket-title">${escapeHtml(ticket.title)}</div>
-          ${visible}
+        <article class="ticket-card ${attentionClass}" draggable="true" data-ticket-id="${ticket.id}" data-drag-source="ticket" ${ticketStatusStyle(ticket)}>
+          ${topFields ? `<div class="ticket-status-row">${topFields}</div>` : ""}
+          ${rows || `<div class="ticket-card-empty">No visible fields selected.</div>`}
         </article>
+      `;
+    }
+
+    function renderTicketCardRow(cells) {
+      const visibleCells = cells.filter(Boolean);
+      if (!visibleCells.length) return "";
+      return `<div class="ticket-card-row cols-${visibleCells.length}">${visibleCells.join("")}</div>`;
+    }
+
+    function renderTicketValue(label, value, tone = "") {
+      if (!value) return "";
+      return `
+        <div class="ticket-value ${tone}">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `;
+    }
+
+    function renderTicketStatusCell(label, value, kind) {
+      return `
+        <div class="ticket-status-cell ${kind}">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
       `;
     }
 
     function renderBoard() {
       captureCalendarScroll();
       const board = $("dispatchBoard");
-      board.parentElement.className = `board-wrap ${state.orientation} ${isCalendarLoading() ? "is-loading" : ""}`;
-      board.className = `board ${state.orientation}`;
+      const layout = boardLayoutOrientation();
+      board.parentElement.className = `board-wrap ${layout} ${isCalendarLoading() ? "is-loading" : ""}`;
+      board.className = `board ${layout}`;
       const selectedTechs = state.selectedTechs.map(id => technicians.find(tech => tech.id === id)).filter(Boolean);
       board.innerHTML = selectedTechs.map(renderTechColumn).join("");
       restoreCalendarScroll();
@@ -1818,7 +1853,7 @@ const technicians = [
       const pastCollapsed = state.collapsedTechGroups[pastKey] !== false;
       const techStyle = `style="--tech-color:${escapeHtml(techThemeColor(tech.id))};"`;
       const workload = techWorkloadSummary(tech, timed, allDay);
-      if (state.orientation === "vertical") {
+      if (boardLayoutOrientation() === "vertical") {
         return `
           <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
             <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
@@ -2011,7 +2046,7 @@ const technicians = [
       const labels = [];
       for (let minutes = calendarStartMinutes(); minutes < calendarEndMinutes(); minutes += 60) {
         const time = minutesToTime(minutes);
-        if (state.orientation === "vertical") {
+        if (boardLayoutOrientation() === "vertical") {
           labels.push(`<div class="time-label">${formatTime(time)}</div>`);
           labels.push(`<div class="time-label">${formatTime(minutesToTime(minutes + 30))}</div>`);
         } else {
@@ -2051,6 +2086,7 @@ const technicians = [
     }
 
     function renderTimeSlots(techId, timed, allDayBlocked = false) {
+      const layout = boardLayoutOrientation();
       const slots = [];
       const nowMarker = renderCurrentTimeMarker();
       for (let minutes = calendarStartMinutes(); minutes < calendarEndMinutes(); minutes += 30) {
@@ -2061,7 +2097,7 @@ const technicians = [
         const blocked = allDayBlocked || timed.some(item => item.availabilityBlock && appointmentOverlapsSlot(item, minutes));
         slots.push(`
           <div class="time-slot ${slotItems.length > 1 ? "has-overlap" : ""} ${blocked ? "availability-blocked" : ""}" data-drop-kind="timed" data-tech-id="${techId}" data-time="${time}">
-            ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length, state.orientation)).join("")}
+            ${slotItems.map((item, index) => renderAppointment(item, index, slotItems.length, layout)).join("")}
           </div>
         `);
       }
@@ -2079,7 +2115,7 @@ const technicians = [
       const position = currentTimePosition();
       if (position === null) return "";
       return `
-        <div class="current-time-marker ${state.orientation}" style="--now-position:${position}%">
+        <div class="current-time-marker ${boardLayoutOrientation()}" style="--now-position:${position}%">
         </div>
       `;
     }
@@ -2104,7 +2140,7 @@ const technicians = [
       if (position === null) return;
       const grid = calendar.querySelector(".slot-grid");
       if (!grid) return;
-      if (state.orientation === "vertical") {
+      if (boardLayoutOrientation() === "vertical") {
         const targetLeft = (grid.scrollWidth * (position / 100)) - (calendar.clientWidth / 2);
         calendar.scrollLeft = Math.max(0, targetLeft);
         return;
@@ -2120,7 +2156,7 @@ const technicians = [
       return `<div class="small-event ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="${item.kind}">${prefix}${escapeHtml(item.label || ticket?.title || "Task")}</div>`;
     }
 
-    function renderAppointment(item, index = 0, count = 1, orientation = state.orientation) {
+    function renderAppointment(item, index = 0, count = 1, orientation = boardLayoutOrientation()) {
       const ticket = tickets.find(entry => entry.id === item.ticketId);
       const durationSlots = Math.max(1, Math.ceil((item.duration || 30) / 30));
       const draggable = item.availabilityBlock ? "false" : "true";
@@ -2353,10 +2389,11 @@ const technicians = [
 
       const grid = card.closest(".slot-grid");
       const firstSlot = grid?.querySelector(".time-slot");
-      const slotSize = state.orientation === "vertical"
+      const layout = boardLayoutOrientation();
+      const slotSize = layout === "vertical"
         ? (firstSlot?.getBoundingClientRect().width || 160)
         : (firstSlot?.getBoundingClientRect().height || 40);
-      const startPointer = state.orientation === "vertical" ? event.clientX : event.clientY;
+      const startPointer = layout === "vertical" ? event.clientX : event.clientY;
       const startDuration = Number(item.duration || 30);
       const snapshot = snapshotDispatchState();
       let nextDuration = startDuration;
@@ -2365,7 +2402,7 @@ const technicians = [
       card.classList.add("resizing");
 
       const onMove = moveEvent => {
-        const pointer = state.orientation === "vertical" ? moveEvent.clientX : moveEvent.clientY;
+        const pointer = layout === "vertical" ? moveEvent.clientX : moveEvent.clientY;
         const deltaSlots = Math.round((pointer - startPointer) / slotSize);
         nextDuration = clampAppointmentDuration(item, startDuration + (deltaSlots * 30));
         item.duration = nextDuration;
@@ -2769,13 +2806,17 @@ const technicians = [
       renderBoard();
     }
 
+    function boardLayoutOrientation() {
+      return state.orientation === "horizontal" ? "vertical" : "horizontal";
+    }
+
     function shiftDate(days) {
       const date = new Date(`${$("boardDate").value}T00:00:00`);
       date.setDate(date.getDate() + days);
       $("boardDate").value = date.toISOString().slice(0, 10);
       state.shouldCenterNow = true;
       renderAll();
-      loadHaloAppointments();
+      loadHaloAppointments({ showLoading: true });
     }
 
     function saveApiSettings() {
@@ -2986,7 +3027,7 @@ const technicians = [
         if (!options.skipPrefetch) prefetchAdjacentAppointments(date);
         return;
       }
-      const shouldShowCalendarLoading = options.apply !== false && date === selectedDate();
+      const shouldShowCalendarLoading = options.showLoading === true && options.apply !== false && date === selectedDate();
       if (shouldShowCalendarLoading) setCalendarLoading(date, true);
       try {
         const result = await callHalo("loadAppointments", {
@@ -3415,6 +3456,26 @@ const technicians = [
       if (state.colorBy === "priority") return `color-${ticket.priority.toLowerCase()}`;
       if (state.colorBy === "type") return `color-type-${ticket.type.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
       return `color-sla-${slaBucket(ticket.sla)}`;
+    }
+
+    function ticketStatusStyle(ticket) {
+      const priorityColor = statusColorForPriority(ticket?.priority);
+      const slaColor = statusColorForSla(ticket?.sla);
+      return `style="--ticket-priority-color:${priorityColor};--ticket-sla-color:${slaColor};"`;
+    }
+
+    function statusColorForPriority(priority) {
+      const value = String(priority || "").toLowerCase();
+      if (value.includes("1") || value.includes("critical") || value.includes("high")) return "#bd4d3f";
+      if (value.includes("2") || value.includes("medium")) return "#c47a10";
+      return "#0d9276";
+    }
+
+    function statusColorForSla(sla) {
+      const bucket = slaBucket(sla);
+      if (bucket === "urgent") return "#a93226";
+      if (bucket === "soon") return "#bc6c25";
+      return "#33815f";
     }
 
     function appointmentClass(item, ticket) {

@@ -818,71 +818,106 @@
       overflow: auto;
     }
 
-    .ticket-stack.list-view {
-      display: grid;
-      grid-auto-flow: row;
-      grid-template-columns: 1fr;
-      grid-auto-columns: unset;
-    }
-
     .ticket-card {
       position: relative;
       border: 1px solid var(--ticket-border);
       background: var(--ticket);
       border-radius: 7px;
-      padding: 8px;
+      padding: 0;
       display: grid;
-      gap: 4px;
       cursor: grab;
       box-shadow: 0 2px 0 rgba(111, 83, 0, 0.11);
+      overflow: hidden;
     }
 
     .ticket-card:active { cursor: grabbing; }
     .ticket-card.dragging { opacity: 0.45; }
-    .ticket-card[class*="color-"] { border-left-width: 5px; }
 
     .ticket-card.new-ticket-attention {
       animation: newTicketAttention 1.2s ease-in-out infinite;
       transform-origin: center;
     }
 
-    .ticket-card.list-mode {
-      grid-template-columns: auto minmax(0, 1fr) auto;
-      align-items: center;
-      gap: 8px 10px;
-      padding: 7px 9px;
+    .ticket-status-row {
+      display: grid;
+      grid-auto-flow: column;
+      grid-auto-columns: minmax(0, 1fr);
+      color: #fff;
+      text-shadow: 0 1px 1px rgba(0, 0, 0, 0.25);
     }
 
-    .ticket-card.list-mode .ticket-top { display: contents; }
-
-    .ticket-card.list-mode .ticket-id {
-      grid-column: 1;
-      white-space: nowrap;
+    .ticket-status-cell {
+      min-width: 0;
+      padding: 5px 8px;
+      display: grid;
+      gap: 1px;
     }
 
-    .ticket-card.list-mode .priority {
-      grid-column: 3;
-      justify-self: end;
+    .ticket-status-cell.sla { background: var(--ticket-sla-color); }
+    .ticket-status-cell.priority-status { background: var(--ticket-priority-color); text-align: right; }
+
+    .ticket-status-cell span {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
     }
 
-    .ticket-card.list-mode .ticket-title {
-      grid-column: 2;
-      white-space: nowrap;
+    .ticket-status-cell strong {
       overflow: hidden;
       text-overflow: ellipsis;
-    }
-
-    .ticket-card.list-mode .ticket-line { display: none; }
-
-    .ticket-top {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 8px;
+      white-space: nowrap;
       font-size: 12px;
+      font-weight: 900;
     }
 
-    .ticket-id { font-weight: 900; color: #745000; }
+    .ticket-card-row {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      padding: 6px 8px 0;
+    }
+
+    .ticket-card-row:last-child { padding-bottom: 8px; }
+
+    .ticket-card-row.cols-1 {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .ticket-value {
+      min-width: 0;
+      display: grid;
+      gap: 1px;
+    }
+
+    .ticket-value:nth-child(even) { text-align: right; }
+
+    .ticket-value span {
+      color: var(--muted);
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .ticket-value strong {
+      color: var(--ink);
+      font-size: 13px;
+      font-weight: 850;
+      line-height: 1.18;
+      overflow-wrap: anywhere;
+    }
+
+    .ticket-value.ticket-number strong,
+    .ticket-value.summary strong {
+      font-size: 14px;
+      font-weight: 950;
+    }
+
+    .ticket-card-empty {
+      padding: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
 
     .priority {
       border-radius: 999px;
@@ -896,20 +931,6 @@
     .p1 { background: var(--danger); }
     .p2 { background: var(--warning); }
     .p3 { background: var(--accent-2); }
-
-    .ticket-title {
-      font-weight: 800;
-      line-height: 1.2;
-      font-size: 13px;
-    }
-
-    .ticket-line {
-      color: var(--muted);
-      font-size: 12px;
-      display: flex;
-      justify-content: space-between;
-      gap: 8px;
-    }
 
     .main-panel {
       min-width: 0;
@@ -1669,14 +1690,6 @@
     body[data-theme="dark"] .appointment {
       color: var(--ink);
       box-shadow: 0 2px 0 rgba(0, 0, 0, 0.22);
-    }
-
-    body[data-theme="dark"] .ticket-id {
-      color: #d6edf8;
-    }
-
-    body[data-theme="dark"] .ticket-line {
-      color: #bac9d1;
     }
 
     body[data-theme="dark"] .priority {
