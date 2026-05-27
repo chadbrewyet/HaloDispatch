@@ -860,8 +860,8 @@
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      font-size: 12px;
-      font-weight: 900;
+      font-size: 11px;
+      font-weight: 700;
     }
 
     .ticket-card-row {
@@ -877,6 +877,10 @@
       grid-template-columns: minmax(0, 1fr);
     }
 
+    .ticket-card-row:first-of-type {
+      grid-template-columns: minmax(0, 0.3fr) minmax(0, 0.7fr);
+    }
+
     .ticket-value {
       min-width: 0;
       display: grid;
@@ -887,8 +891,8 @@
 
     .ticket-value strong {
       color: var(--ink);
-      font-size: 13px;
-      font-weight: 850;
+      font-size: 12px;
+      font-weight: 500;
       line-height: 1.18;
       overflow-wrap: anywhere;
     }
@@ -897,6 +901,11 @@
     .ticket-value.summary strong {
       font-size: 14px;
       font-weight: 950;
+    }
+
+    .ticket-card-row:nth-of-type(3) .ticket-value strong {
+      font-size: 11px;
+      font-weight: 500;
     }
 
     .ticket-card-empty {
