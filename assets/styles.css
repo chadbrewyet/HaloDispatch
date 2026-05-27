@@ -850,17 +850,11 @@
       min-width: 0;
       padding: 5px 8px;
       display: grid;
-      gap: 1px;
+      align-items: center;
     }
 
     .ticket-status-cell.sla { background: var(--ticket-sla-color); }
     .ticket-status-cell.priority-status { background: var(--ticket-priority-color); text-align: right; }
-
-    .ticket-status-cell span {
-      font-size: 10px;
-      font-weight: 800;
-      text-transform: uppercase;
-    }
 
     .ticket-status-cell strong {
       overflow: hidden;
@@ -886,17 +880,10 @@
     .ticket-value {
       min-width: 0;
       display: grid;
-      gap: 1px;
+      align-items: start;
     }
 
     .ticket-value:nth-child(even) { text-align: right; }
-
-    .ticket-value span {
-      color: var(--muted);
-      font-size: 10px;
-      font-weight: 800;
-      text-transform: uppercase;
-    }
 
     .ticket-value strong {
       color: var(--ink);

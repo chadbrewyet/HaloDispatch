@@ -29,7 +29,7 @@ const technicians = [
       selectedTicketTypes: [],
       orientation: "horizontal",
       reportLists: ["api-open"],
-      visibleFields: ["ticketNumber", "summary", "client", "site", "contact", "type", "sla", "priority"],
+      visibleFields: ["ticketNumber", "summary"],
       workingHours: [7, 17],
       calendarStartTime: "07:00",
       calendarEndTime: "17:00",
@@ -905,11 +905,12 @@ const technicians = [
 
     function normalizeVisibleFields(fields) {
       const allowed = new Set(fieldOptions.map(option => option.key));
-      const source = Array.isArray(fields) ? fields : [];
+      const source = Array.isArray(fields) ? fields : ["ticketNumber", "summary"];
       const mapped = source
         .map(field => field === "title" ? "summary" : field)
         .filter(field => allowed.has(field));
       const normalized = Array.from(new Set(mapped));
+      if (!normalized.length) return ["ticketNumber", "summary"];
       if (source.includes("estimate")) {
         return Array.from(new Set(["ticketNumber", "summary", ...normalized]));
       }
@@ -1805,7 +1806,6 @@ const technicians = [
       if (!value) return "";
       return `
         <div class="ticket-value ${tone}">
-          <span>${escapeHtml(label)}</span>
           <strong>${escapeHtml(value)}</strong>
         </div>
       `;
@@ -1814,7 +1814,6 @@ const technicians = [
     function renderTicketStatusCell(label, value, kind) {
       return `
         <div class="ticket-status-cell ${kind}">
-          <span>${escapeHtml(label)}</span>
           <strong>${escapeHtml(value)}</strong>
         </div>
       `;
