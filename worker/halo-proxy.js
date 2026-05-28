@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1015;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-28-ticket-slo-priority";
+const WORKER_BUILD = "2026-05-28-completed-appointments";
 
 export default {
   async fetch(request, env) {
@@ -1160,6 +1160,7 @@ function summarizeRawAppointment(appointment) {
     holiday_id: appointment.holiday_id,
     subject: appointment.subject,
     appointment_type_name: appointment.appointment_type_name,
+    completion_status: appointment.completion_status ?? appointment.completionstatus ?? appointment.complete_status,
     agent_id: appointment.agent_id,
     start: appointmentDateValue(appointment, "start"),
     end: appointmentDateValue(appointment, "end"),
@@ -1169,13 +1170,35 @@ function summarizeRawAppointment(appointment) {
 
 function isCompletedAppointment(appointment) {
   const values = [
+    appointment.completion_status,
+    appointment.completionstatus,
+    appointment.completionStatus,
+    appointment.completion_status_name,
+    appointment.completionstatus_name,
+    appointment.completionStatusName,
     appointment.status,
+    appointment.status_name,
+    appointment.statusname,
     appointment.appointment_status,
+    appointment.appointment_status_name,
+    appointment.appointmentstatus,
     appointment.complete_status,
+    appointment.completestatus,
     appointment.agent_status,
-    appointment.complete_date
+    appointment.agent_status_name,
+    appointment.complete_date,
+    appointment.completed_date,
+    appointment.date_completed,
+    appointment.datecompleted
   ].map(value => String(value || "").toLowerCase());
-  return values.some(value => value.includes("complete") || value === "closed" || value === "done");
+  const booleanValues = [
+    appointment.completed,
+    appointment.is_completed,
+    appointment.iscomplete,
+    appointment.complete
+  ];
+  return values.some(value => value.includes("complete") || value === "closed" || value === "done")
+    || booleanValues.some(isTrue);
 }
 
 function appointmentAgentIds(appointment) {
