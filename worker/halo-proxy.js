@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1013;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-27-storage-report-map";
+const WORKER_BUILD = "2026-05-27-ticket-popover-fields";
 
 export default {
   async fetch(request, env) {
