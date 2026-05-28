@@ -457,6 +457,9 @@ const technicians = [
       if (Array.isArray(preferences.ticketLists) && preferences.ticketLists.length) {
         applyTicketListPayload(preferences.ticketLists);
       } else {
+        if (Array.isArray(preferences.reportLists)) state.reportLists = preferences.reportLists.slice(0, 5);
+        if (preferences.listFilters && typeof preferences.listFilters === "object") state.listFilters = preferences.listFilters;
+        if (preferences.collapsedLists && typeof preferences.collapsedLists === "object") state.collapsedLists = preferences.collapsedLists;
         normalizeTicketListState();
       }
       if (technicians.length) ensureSelectedTechnicians();
@@ -2911,6 +2914,7 @@ const technicians = [
       setExpandedTicketList(sectionKey(state.reportLists.length - 1), true);
       resetReportListHeights();
       saveLocalSettings();
+      saveHaloUserPreferences({ quiet: true });
       renderReportLists();
     }
 
