@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1015;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-28-completed-appointments";
+const WORKER_BUILD = "2026-05-28-complete-status-flag";
 
 export default {
   async fetch(request, env) {
@@ -1169,6 +1169,10 @@ function summarizeRawAppointment(appointment) {
 }
 
 function isCompletedAppointment(appointment) {
+  const completeStatus = appointment.complete_status ?? appointment.completestatus;
+  if (String(completeStatus) === "0") return true;
+  if (String(completeStatus) === "-1") return false;
+
   const values = [
     appointment.completion_status,
     appointment.completionstatus,
