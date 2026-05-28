@@ -1050,6 +1050,10 @@
       overflow: hidden;
     }
 
+    .tech-column.schedule-collapsed {
+      grid-template-rows: auto auto auto minmax(0, 1fr) auto minmax(0, 1fr);
+    }
+
     .tech-column.tech-over {
       outline: 2px solid var(--accent);
       outline-offset: -3px;
@@ -1066,6 +1070,10 @@
       grid-template-rows: minmax(238px, 1fr);
       min-width: 0;
       height: auto;
+    }
+
+    .board.vertical .tech-column.schedule-collapsed {
+      grid-template-columns: 132px minmax(0, 1fr);
     }
 
     .tech-header {
@@ -1196,6 +1204,10 @@
       overflow: auto;
     }
 
+    .tech-column.schedule-collapsed .drop-zone {
+      max-height: none;
+    }
+
     .past-task-zone {
       background: color-mix(in srgb, var(--warning) 8%, var(--panel));
       border-top: 1px solid color-mix(in srgb, var(--warning) 28%, var(--line));
@@ -1217,8 +1229,7 @@
     }
 
     .board.vertical .calendar-collapsed-note {
-      min-height: 0;
-      border-bottom: 0;
+      display: none;
     }
 
     .vertical-task-stack .drop-zone {
