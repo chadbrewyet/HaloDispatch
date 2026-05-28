@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1015;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-28-appointment-ticket-names";
+const WORKER_BUILD = "2026-05-28-ticket-slo-priority";
 
 export default {
   async fetch(request, env) {
@@ -230,6 +230,9 @@ async function handleTicketLoad(payload, env) {
     includecompleted: "false",
     includetickettype: "true",
     includestatus: "true",
+    includeslaactiondate: "true",
+    includeslatimer: "true",
+    excludeslacalcs: "false",
     include_custom_fields: dispatchDateFieldId(env),
     include_customfields: dispatchDateFieldId(env),
     count: String(pageSize(env)),
@@ -258,7 +261,8 @@ async function handleTicketLoad(payload, env) {
       normalizedCount: tickets.length,
       pages: meta.pages,
       selectedTicketTypes: ticketTypeIds,
-      excludedTypes: Array.from(excludedTicketTypeNames)
+      excludedTypes: Array.from(excludedTicketTypeNames),
+      rawSample: payload.debug ? rawTickets.slice(0, 10).map(summarizeRawTicket) : undefined
     }
   };
 }
@@ -291,14 +295,14 @@ function normalizeTicket(ticket, env) {
     haloTicketId: Number(id),
     client: stripHtml(ticket.client_name || ticket.client || ticket.username || ticket.customer || ""),
     title: stripHtml(ticket.summary || ticket.subject || ticket.title || `Ticket #${id}`),
-    priority: stripHtml(ticket.priority || ticket.priority_name || ticket.seriousness || ""),
+    priority: ticketPriorityName(ticket),
     status: stripHtml(ticket.status_name || ticket.statusname || ticket.status?.name || ticket.status || ""),
     type: typeName,
     typeId: typeId ? String(typeId) : "",
     team: stripHtml(teamName || ""),
     teamId: teamId ? String(teamId) : "",
     site: stripHtml(ticket.site_name || ticket.sitename || ticket.site || ""),
-    sla: stripHtml(ticket.sla || ticket.sla_name || ticket.slastate || ""),
+    sla: ticketSloRemaining(ticket, env),
     estimate: ticket.estimatedays || ticket.estimate || "",
     contact: stripHtml(ticket.user_name || ticket.contact_name || ticket.contact || ""),
     serviceZone: stripHtml(serviceZone || ticket.service_zone || ticket.servicezone || ""),
@@ -360,6 +364,140 @@ async function handleAppointmentLoad(payload, env) {
       rawHolidaySample: payload.debug ? rawHolidays.slice(0, 10).map(summarizeRawAppointment) : undefined
     }
   };
+}
+
+function ticketPriorityName(ticket) {
+  return cleanDisplayText(
+    ticket.priority_name,
+    ticket.priority?.name,
+    ticket.priority?.label,
+    ticket.priority?.display,
+    ticket.seriousness_name,
+    ticket.seriousness?.name,
+    ticket.seriousness?.label,
+    ticket.seriousnesslevel_name,
+    ticket.urgency_name,
+    ticket.urgency?.name,
+    ticket.importance_name,
+    ticket.priority,
+    ticket.seriousness,
+    ticket.priority_id ? `P${ticket.priority_id}` : ""
+  );
+}
+
+function ticketSloRemaining(ticket, env) {
+  const numericTimeLeft = firstPresentValue(
+    ticket.slo_time_remaining,
+    ticket.slo_remaining,
+    ticket.slatimeremaining,
+    ticket.sla_time_remaining,
+    ticket.sla_remaining,
+    ticket.targettimeleft,
+    ticket.target_time_left,
+    ticket.slatimeleft
+  );
+  const formattedNumeric = formatNumericTimeRemaining(numericTimeLeft);
+  if (formattedNumeric) return formattedNumeric;
+
+  const direct = cleanDisplayText(
+    ticket.slo_time_remaining,
+    ticket.slo_remaining,
+    ticket.slatimeremaining,
+    ticket.sla_time_remaining,
+    ticket.sla_remaining,
+    ticket.targettimeleft,
+    ticket.target_time_left,
+    ticket.slatimeleft
+  );
+  if (direct) return direct;
+
+  const targetDate = firstText(
+    ticket.fixbydate,
+    ticket.fixby_date,
+    ticket.fix_by_date,
+    ticket.slaactiondate,
+    ticket.sla_action_date,
+    ticket.targetdate_with_timezone,
+    ticket.target_date_with_timezone,
+    ticket.targetdate,
+    ticket.target_date,
+    ticket.due_by,
+    ticket.dueby,
+    ticket.duedate,
+    ticket.due_date
+  );
+  const remaining = formatTimeRemaining(targetDate, env);
+  if (remaining) return remaining;
+
+  return cleanDisplayText(
+    ticket.sla_status,
+    ticket.slastatus,
+    ticket.slastate,
+    ticket.sla_state,
+    ticket.slaresponsestate,
+    ticket.slaresponse_state,
+    ticket.sla_name,
+    ticket.sla?.name,
+    ticket.sla
+  );
+}
+
+function firstPresentValue(...values) {
+  return values.find(value => value !== undefined && value !== null && value !== "");
+}
+
+function cleanDisplayText(...values) {
+  const text = stripHtml(firstText(...values));
+  if (!text || text === "0" || text.toLowerCase() === "null" || text.toLowerCase() === "undefined") return "";
+  return text;
+}
+
+function formatNumericTimeRemaining(value) {
+  if (value === undefined || value === null || value === "") return "";
+  if (typeof value === "string" && /[a-z:]/i.test(value)) return "";
+  const hours = Number(value);
+  if (!Number.isFinite(hours) || hours === 0) return "";
+  const prefix = hours < 0 ? "Overdue " : "";
+  const absoluteMinutes = Math.round(Math.abs(hours) * 60);
+  return formatMinuteSpan(absoluteMinutes, prefix);
+}
+
+function formatTimeRemaining(value) {
+  if (!value) return "";
+  const target = new Date(normalizeDateTime(value));
+  if (!Number.isFinite(target.getTime())) return cleanDisplayText(value);
+
+  const diffMinutes = Math.round((target.getTime() - Date.now()) / 60000);
+  const absoluteMinutes = Math.abs(diffMinutes);
+  const prefix = diffMinutes < 0 ? "Overdue " : "";
+  return formatMinuteSpan(absoluteMinutes, prefix);
+}
+
+function formatMinuteSpan(absoluteMinutes, prefix = "") {
+  if (absoluteMinutes < 60) return `${prefix}${absoluteMinutes}m`;
+
+  const hours = Math.floor(absoluteMinutes / 60);
+  const minutes = absoluteMinutes % 60;
+  if (hours < 24) {
+    return `${prefix}${hours}h${minutes ? ` ${minutes}m` : ""}`;
+  }
+
+  const days = Math.floor(hours / 24);
+  const remainingHours = hours % 24;
+  return `${prefix}${days}d${remainingHours ? ` ${remainingHours}h` : ""}`;
+}
+
+function summarizeRawTicket(ticket) {
+  const usefulKeys = Object.keys(ticket || {})
+    .filter(key => /(sla|slo|priority|serious|fixby|respondby|target|due)/i.test(key))
+    .sort();
+  return usefulKeys.reduce((summary, key) => {
+    summary[key] = ticket[key];
+    return summary;
+  }, {
+    id: ticket?.id ?? ticket?.faultid,
+    summary: ticket?.summary ?? ticket?.subject ?? ticket?.title
+  });
 }
 
 async function loadAppointmentsWithFallbacks(env, date, agentIds) {
