@@ -2072,6 +2072,14 @@ const technicians = [
       return `${Number.isInteger(hours) ? hours : hours.toFixed(1)}h`;
     }
 
+    function formatAppointmentDuration(minutes) {
+      const value = Number(minutes || 0);
+      if (value < 60) return `${value}m`;
+      const hours = Math.floor(value / 60);
+      const remainingMinutes = value % 60;
+      return `${hours}h${remainingMinutes ? ` ${remainingMinutes}m` : ""}`;
+    }
+
     function renderTaskZone(kind, techId, techName, label, items, emptyText) {
       const showInlineLabel = kind !== "noTime";
       const orderAttrs = kind === "noTime" ? `data-no-time-order-zone data-order-kind="noTime" data-tech-id="${techId}"` : "";
@@ -2245,7 +2253,7 @@ const technicians = [
       return `
         <div class="appointment ${count > 1 ? "overlap-card" : ""} ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};--duration-slots:${durationSlots};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
           <strong>${calendarCardTitle(item, ticket)}</strong>
-          <span>${escapeHtml(formatTime(item.time))} - ${item.duration || 30}m</span>
+          <span>${escapeHtml(formatTime(item.time))} - ${formatAppointmentDuration(item.duration || 30)}</span>
           ${resizeHandle}
         </div>
       `;
@@ -2564,7 +2572,7 @@ const technicians = [
         item.duration = nextDuration;
         card.style.setProperty("--duration-slots", Math.max(1, Math.ceil(nextDuration / 30)));
         const label = card.querySelector("span:not(.appointment-resize-handle)");
-        if (label) label.textContent = `${formatTime(item.time)} - ${nextDuration}m`;
+        if (label) label.textContent = `${formatTime(item.time)} - ${formatAppointmentDuration(nextDuration)}`;
       };
 
       const onEnd = async endEvent => {
