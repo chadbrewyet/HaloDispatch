@@ -284,6 +284,7 @@ function normalizeTicket(ticket, env) {
     || ticket.team?.name
     || (typeof rawTeam === "string" && !/^\d+$/.test(rawTeam) ? rawTeam : "");
   const customDate = customDatePart(customFieldValue(ticket, dispatchDateFieldId(env), dispatchDateFieldName(env)));
+  const nextAppointmentDate = customDatePart(customFieldValue(ticket, "", "CFCFNextAppointmentDate"));
   const serviceZone = customFieldValue(ticket, "Service Zone");
   return {
     id: Number(id),
@@ -303,6 +304,8 @@ function normalizeTicket(ticket, env) {
     serviceZone: stripHtml(serviceZone || ticket.service_zone || ticket.servicezone || ""),
     details: stripHtml(ticket.details || ticket.detail || ticket.lastnote || ticket.last_note || ""),
     dateField: customDate,
+    nextAppointmentDate,
+    lastAction: stripHtml(ticket.lastaction || ticket.last_action || ticket.lastnote || ticket.last_note || ticket.lastactionnote || ticket.last_action_note || ""),
     dateOpened: datePart(ticket.dateoccurred || ticket.dateoccured || ticket.date_occurred || ticket.dateopened || ticket.date_opened || ticket.datecreated || ticket.date_created, env) || "",
     assignedTo: ticket.agent_id ? String(ticket.agent_id) : "",
     completed: isCompletedTicket(ticket)
@@ -800,8 +803,9 @@ function customFieldValue(ticket, fieldId, fieldName = "") {
   if (directValue !== undefined && directValue !== null && directValue !== "") return directValue;
 
   const fields = Array.isArray(ticket.customfields) ? ticket.customfields : [];
-  const wanted = String(fieldId).toLowerCase();
+  const wanted = String(fieldId || "").toLowerCase();
   const wantedName = String(fieldName || "").toLowerCase();
+  const wantsDispatchDate = wanted === "486" || wantedName === "cftaskwithouttimedate";
   const match = fields.find(field => {
     const candidates = [
       field.id,
@@ -817,11 +821,13 @@ function customFieldValue(ticket, fieldId, fieldName = "") {
       field.input_name,
       field.variable_name
     ].map(value => String(value || "").toLowerCase());
-    return candidates.includes(wanted)
+    return (wanted && candidates.includes(wanted))
       || (wantedName && candidates.includes(wantedName))
-      || candidates.includes("cftaskwithouttimedate")
-      || candidates.includes("486")
-      || candidates.includes("$cf00486");
+      || (wantsDispatchDate && (
+        candidates.includes("cftaskwithouttimedate")
+        || candidates.includes("486")
+        || candidates.includes("$cf00486")
+      ));
   });
   return customFieldEntryValue(match);
 }
@@ -831,7 +837,7 @@ function directCustomFieldValue(ticket, fieldId, fieldName = "") {
     fieldName,
     String(fieldName || "").toLowerCase(),
     String(fieldName || "").toUpperCase(),
-    fieldId,
+    fieldId ? String(fieldId) : "",
     `CF${fieldId}`,
     `cf${fieldId}`,
     `$CF${String(fieldId).padStart(5, "0")}`,

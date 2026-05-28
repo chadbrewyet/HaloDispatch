@@ -1621,6 +1621,11 @@
       text-overflow: ellipsis;
     }
 
+    .appointment strong span + span::before {
+      content: " - ";
+      font-weight: 700;
+    }
+
     .color-p1 {
       border-color: #bd4d3f;
       border-left-color: #bd4d3f;

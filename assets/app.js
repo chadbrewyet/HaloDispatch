@@ -2241,15 +2241,24 @@ const technicians = [
       const ticket = tickets.find(entry => entry.id === item.ticketId);
       const durationSlots = Math.max(1, Math.ceil((item.duration || 30) / 30));
       const draggable = item.availabilityBlock ? "false" : "true";
-      const prefix = item.haloTicketId ? `#${item.ticketId} ` : "";
       const resizeHandle = !item.availabilityBlock && item.appointmentId ? `<span class="appointment-resize-handle" data-resize-appointment="${item.appointmentId}" title="Resize appointment"></span>` : "";
       return `
         <div class="appointment ${count > 1 ? "overlap-card" : ""} ${appointmentClass(item, ticket)}" draggable="${draggable}" data-ticket-id="${item.ticketId}" data-appointment-id="${item.appointmentId || ""}" data-drag-source="scheduled" data-kind="timed" style="--overlap-count:${count};--overlap-index:${index};--duration-slots:${durationSlots};" title="${escapeHtml(item.label || ticket?.title || "Appointment")}">
-          <strong>${prefix}${escapeHtml(item.label || ticket?.title || "Appointment")}</strong>
+          <strong>${calendarCardTitle(item, ticket)}</strong>
           <span>${escapeHtml(formatTime(item.time))} - ${item.duration || 30}m</span>
           ${resizeHandle}
         </div>
       `;
+    }
+
+    function calendarCardTitle(item, ticket) {
+      if (!ticket || item.availabilityBlock || !item.haloTicketId) return escapeHtml(item.label || ticket?.title || "Appointment");
+      const ticketNumber = item.haloTicketId || ticket.haloTicketId || ticket.id;
+      return [
+        `<span>#${escapeHtml(ticketNumber)}</span>`,
+        ticket.client ? `<span>${escapeHtml(ticket.client)}</span>` : "",
+        `<span>${escapeHtml(ticket.title || item.label || "Ticket")}</span>`
+      ].filter(Boolean).join(" ");
     }
 
     function sectionKey(index) {
@@ -2822,13 +2831,14 @@ const technicians = [
       popover.style.setProperty("--ticket-popover-left", `${Math.max(16, left)}px`);
       popover.style.setProperty("--ticket-popover-top", `${Math.max(16, y)}px`);
       popover.innerHTML = `
-        <strong>#${ticket.id} ${escapeHtml(ticket.title)}</strong>
+        <strong>#${ticket.id}</strong>
+        <span><b>Summary:</b> ${escapeHtml(ticket.title || "-")}</span>
         <span><b>Client:</b> ${escapeHtml(ticket.client)} - ${escapeHtml(ticket.site)}</span>
         <span><b>Contact:</b> ${escapeHtml(ticket.contact)}</span>
         <span><b>Type:</b> ${escapeHtml(ticket.type || "-")}</span>
-        <span><b>Estimate:</b> ${escapeHtml(ticket.estimate || "-")}</span>
-        <span><b>No-Time Date:</b> ${escapeHtml(ticket.dateField || "Not set")}</span>
-        <span>${escapeHtml(ticket.details)}</span>
+        <span><b>Date:</b> ${escapeHtml(ticket.nextAppointmentDate || "Not set")}</span>
+        ${ticket.lastAction ? `<span><b>Last Action:</b> ${escapeHtml(ticket.lastAction)}</span>` : ""}
+        ${ticket.details ? `<span><b>Details:</b> ${escapeHtml(ticket.details)}</span>` : ""}
         <div class="ticket-popover-actions">
           <button type="button" id="popoverOpenTicket">Open Ticket</button>
         </div>
@@ -3154,6 +3164,8 @@ const technicians = [
         contact: ticket.contact || "",
         details: ticket.details || "",
         dateField: ticket.dateField || "",
+        nextAppointmentDate: ticket.nextAppointmentDate || "",
+        lastAction: ticket.lastAction || "",
         dateOpened: ticket.dateOpened || "",
         assignedTo: ticket.assignedTo || "",
         haloTicketId: ticket.haloTicketId || id,
@@ -3363,6 +3375,8 @@ const technicians = [
         contact: "",
         details: appointment.label || "",
         dateField: appointment.date,
+        nextAppointmentDate: appointment.date,
+        lastAction: "",
         assignedTo: appointment.techId,
         haloTicketId: appointment.haloTicketId || null,
         completed: appointment.completed
@@ -3391,6 +3405,8 @@ const technicians = [
         contact: "",
         details: task.label || "",
         dateField: task.date,
+        nextAppointmentDate: "",
+        lastAction: "",
         assignedTo: task.techId,
         haloTicketId: task.haloTicketId || task.ticketId,
         completed: task.completed
