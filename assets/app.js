@@ -3642,7 +3642,7 @@ const technicians = [
     function ticketColorClass(ticket) {
       if (!ticket) return "";
       if (ticket.completed) return "color-completed";
-      if (state.colorBy === "priority") return `color-${ticket.priority.toLowerCase()}`;
+      if (state.colorBy === "priority") return `color-${priorityBucket(ticket.priority)}`;
       if (state.colorBy === "type") return `color-type-${ticket.type.toLowerCase().replace(/[^a-z0-9]+/g, "")}`;
       return `color-sla-${slaBucket(ticket.sla)}`;
     }
@@ -3654,9 +3654,9 @@ const technicians = [
     }
 
     function statusColorForPriority(priority) {
-      const value = String(priority || "").toLowerCase();
-      if (value.includes("1") || value.includes("critical") || value.includes("high")) return "#bd4d3f";
-      if (value.includes("2") || value.includes("medium")) return "#c47a10";
+      const bucket = priorityBucket(priority);
+      if (bucket === "p1") return "#bd4d3f";
+      if (bucket === "p2") return "#c47a10";
       return "#0d9276";
     }
 
@@ -3676,9 +3676,39 @@ const technicians = [
 
     function slaBucket(sla) {
       const value = String(sla || "").toLowerCase();
-      if (value.includes("9:") || value.includes("10:") || value.includes("today")) return "urgent";
-      if (value.includes("2:") || value.includes("3:") || value.includes("4:")) return "soon";
+      if (!value) return "later";
+      if (value.includes("overdue") || value.includes("breach")) return "urgent";
+
+      const minutes = slaValueToMinutes(value);
+      if (Number.isFinite(minutes)) {
+        if (minutes <= 60) return "urgent";
+        if (minutes <= 240) return "soon";
+        return "later";
+      }
+
+      if (value.includes("today")) return "soon";
       return "later";
+    }
+
+    function priorityBucket(priority) {
+      const value = String(priority || "").toLowerCase();
+      if (value.includes("critical") || value.includes("emergency") || value.includes("urgent") || value.includes("high") || /\bp\s*1\b/.test(value)) return "p1";
+      if (value.includes("medium") || value.includes("normal") || /\bp\s*2\b/.test(value)) return "p2";
+      return "p3";
+    }
+
+    function slaValueToMinutes(value) {
+      const text = String(value || "").toLowerCase();
+      if (!text) return Number.NaN;
+      const days = Number(text.match(/(\d+(?:\.\d+)?)\s*d/)?.[1] || 0);
+      const hours = Number(text.match(/(\d+(?:\.\d+)?)\s*h/)?.[1] || 0);
+      const minutes = Number(text.match(/(\d+(?:\.\d+)?)\s*m/)?.[1] || 0);
+      if (days || hours || minutes) return (days * 1440) + (hours * 60) + minutes;
+
+      const clock = text.match(/\b(\d{1,2}):(\d{2})\b/);
+      if (clock) return (Number(clock[1]) * 60) + Number(clock[2]);
+
+      return Number.NaN;
     }
 
     function formatHour(hour) {
