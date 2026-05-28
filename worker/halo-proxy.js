@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1015;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-28-storage-table-rebuild";
+const WORKER_BUILD = "2026-05-28-appointment-ticket-names";
 
 export default {
   async fetch(request, env) {
@@ -913,6 +913,9 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
   const title = appointment.subject || appointment.note || appointment.appointment_type_name || `Appointment #${displayId}`;
   const completed = isCompletedAppointment(appointment);
   const availabilityBlock = Boolean(holidayId);
+  const client = appointmentClientName(appointment);
+  const contact = appointmentContactName(appointment);
+  const site = appointmentSiteName(appointment);
 
   return agentIds.map(agentId => ({
     appointmentId,
@@ -924,10 +927,75 @@ function normalizeAppointment(appointment, date, allowedAgentIds, env) {
     duration,
     date: appointmentDisplayDate(startDate, endDate, date, env),
     label: stripHtml(title),
+    client,
+    contact,
+    site,
     completed,
     availabilityBlock,
     source: "haloAppointment"
   }));
+}
+
+function appointmentClientName(appointment) {
+  return stripHtml(firstText(
+    appointment.client_name
+    , appointment.clientname
+    , appointment.client
+    , appointment.customer_name
+    , appointment.customer
+    , appointment.account_name
+    , appointment.account
+    , appointment.company_name
+    , appointment.company
+    , appointment.username
+  ));
+}
+
+function appointmentContactName(appointment) {
+  return stripHtml(firstText(
+    appointment.user_name
+    , appointment.username
+    , appointment.contact_name
+    , appointment.contactname
+    , appointment.contact
+    , appointment.end_user_name
+    , appointment.enduser_name
+    , appointment.user
+  ));
+}
+
+function appointmentSiteName(appointment) {
+  return stripHtml(firstText(
+    appointment.site_name
+    , appointment.sitename
+    , appointment.site
+    , appointment.location_name
+    , appointment.location
+  ));
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    const text = objectText(value);
+    if (text) return text;
+  }
+  return "";
+}
+
+function objectText(value) {
+  if (value === undefined || value === null) return "";
+  if (Array.isArray(value)) return value.map(objectText).find(Boolean) || "";
+  if (typeof value === "object") {
+    return objectText(value.name)
+      || objectText(value.display)
+      || objectText(value.text)
+      || objectText(value.label)
+      || objectText(value.value)
+      || objectText(value.username)
+      || objectText(value.client_name)
+      || objectText(value.contact_name);
+  }
+  return String(value || "");
 }
 
 function appointmentDisplayDate(startDate, endDate, selectedDate, env) {

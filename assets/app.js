@@ -3361,18 +3361,22 @@ const technicians = [
     }
 
     function hydrateTicketFromAppointment(appointment) {
-      if (tickets.some(ticket => ticket.id === appointment.ticketId)) return;
+      const existing = tickets.find(ticket => ticket.id === appointment.ticketId);
+      if (existing) {
+        mergeAppointmentTicketFields(existing, appointment);
+        return;
+      }
       tickets.push({
         id: appointment.ticketId,
-        client: "",
+        client: appointment.client || "",
         title: appointment.label || "Scheduled appointment",
         priority: "",
         type: "Appointment",
         report: "",
-        site: "",
+        site: appointment.site || "",
         sla: "",
         estimate: appointment.duration ? `${appointment.duration}m` : "",
-        contact: "",
+        contact: appointment.contact || "",
         details: appointment.label || "",
         dateField: appointment.date,
         nextAppointmentDate: appointment.date,
@@ -3381,6 +3385,13 @@ const technicians = [
         haloTicketId: appointment.haloTicketId || null,
         completed: appointment.completed
       });
+    }
+
+    function mergeAppointmentTicketFields(ticket, appointment) {
+      if (!ticket.client && appointment.client) ticket.client = appointment.client;
+      if (!ticket.contact && appointment.contact) ticket.contact = appointment.contact;
+      if (!ticket.site && appointment.site) ticket.site = appointment.site;
+      if (!ticket.nextAppointmentDate && appointment.date) ticket.nextAppointmentDate = appointment.date;
     }
 
     function hydrateTicketFromDateOnlyTask(task) {
