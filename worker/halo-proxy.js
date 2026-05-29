@@ -70,7 +70,7 @@ function verifyDispatchToken(request, env) {
   return {
     ok: false,
     status: supplied ? 403 : 401,
-    error: supplied ? "Invalid dispatch test token." : "Dispatch test token required."
+    error: "Access denied"
   };
 }
 
