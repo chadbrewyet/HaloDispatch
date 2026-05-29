@@ -88,6 +88,7 @@ const technicians = [
       { key: "contact", label: "Contact" },
       { key: "type", label: "Ticket Type" },
       { key: "sla", label: "SLO Time Remaining" },
+      { key: "status", label: "Status" },
       { key: "priority", label: "Priority" }
     ];
 
@@ -1831,6 +1832,7 @@ const technicians = [
       const attentionClass = listExpanded && attentionTicketIds.has(Number(ticket.id)) ? "new-ticket-attention" : "";
       const topFields = [
         visible.has("sla") ? renderTicketStatusCell("SLO Time Left", ticket.sla || "None", "sla") : "",
+        visible.has("status") ? renderTicketStatusCell("Status", ticket.status || "None", "ticket-status") : "",
         visible.has("priority") ? renderTicketStatusCell("Priority", ticket.priority || "None", "priority-status") : ""
       ].filter(Boolean).join("");
       const rows = [
@@ -3183,6 +3185,7 @@ const technicians = [
         dateOpened: ticket.dateOpened || "",
         assignedTo: ticket.assignedTo || "",
         haloTicketId: ticket.haloTicketId || id,
+        onHold: truthyFlag(ticket.onHold),
         completed: Boolean(ticket.completed),
         source: "haloTicket"
       };
@@ -3660,9 +3663,10 @@ const technicians = [
     }
 
     function ticketStatusStyle(ticket) {
-      const priorityColor = statusColorForPriority(ticket?.priority);
-      const slaColor = statusColorForSla(ticket?.sla);
-      return `style="--ticket-priority-color:${priorityColor};--ticket-sla-color:${slaColor};"`;
+      const priorityColor = ticket?.onHold ? "#2f76b7" : statusColorForPriority(ticket?.priority);
+      const slaColor = ticket?.onHold ? "#2f76b7" : statusColorForSla(ticket?.sla);
+      const statusColor = "#536b7a";
+      return `style="--ticket-priority-color:${priorityColor};--ticket-sla-color:${slaColor};--ticket-status-color:${statusColor};"`;
     }
 
     function statusColorForPriority(priority) {
@@ -3707,6 +3711,12 @@ const technicians = [
       if (value.includes("critical") || value.includes("emergency") || value.includes("urgent") || value.includes("high") || /\bp\s*1\b/.test(value)) return "p1";
       if (value.includes("medium") || value.includes("normal") || /\bp\s*2\b/.test(value)) return "p2";
       return "p3";
+    }
+
+    function truthyFlag(value) {
+      if (value === true || value === 1) return true;
+      const text = String(value || "").toLowerCase();
+      return text === "true" || text === "1" || text === "yes";
     }
 
     function slaValueToMinutes(value) {

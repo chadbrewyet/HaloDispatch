@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1015;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-28-dispatch-test-token";
+const WORKER_BUILD = "2026-05-29-ticket-status-hold";
 
 export default {
   async fetch(request, env) {
@@ -342,6 +342,7 @@ function normalizeTicket(ticket, env) {
     lastAction: stripHtml(ticket.lastaction || ticket.last_action || ticket.lastnote || ticket.last_note || ticket.lastactionnote || ticket.last_action_note || ""),
     dateOpened: datePart(ticket.dateoccurred || ticket.dateoccured || ticket.date_occurred || ticket.dateopened || ticket.date_opened || ticket.datecreated || ticket.date_created, env) || "",
     assignedTo: ticket.agent_id ? String(ticket.agent_id) : "",
+    onHold: isTicketOnHold(ticket),
     completed: isCompletedTicket(ticket)
   };
 }
@@ -519,7 +520,7 @@ function formatMinuteSpan(absoluteMinutes, prefix = "") {
 
 function summarizeRawTicket(ticket) {
   const usefulKeys = Object.keys(ticket || {})
-    .filter(key => /(sla|slo|priority|serious|fixby|respondby|target|due)/i.test(key))
+    .filter(key => /(sla|slo|priority|serious|fixby|respondby|target|due|hold|status)/i.test(key))
     .sort();
   return usefulKeys.reduce((summary, key) => {
     summary[key] = ticket[key];
@@ -528,6 +529,30 @@ function summarizeRawTicket(ticket) {
     id: ticket?.id ?? ticket?.faultid,
     summary: ticket?.summary ?? ticket?.subject ?? ticket?.title
   });
+}
+
+function isTicketOnHold(ticket) {
+  const booleanValues = [
+    ticket.onhold,
+    ticket.on_hold,
+    ticket.is_on_hold,
+    ticket.sla_on_hold,
+    ticket.slaholdischecked,
+    ticket.is_slahold,
+    ticket.sla_hold
+  ];
+  if (booleanValues.some(isTrue)) return true;
+
+  const textValues = [
+    ticket.status,
+    ticket.status_name,
+    ticket.statusname,
+    ticket.slastate,
+    ticket.sla_state,
+    ticket.sla_status,
+    ticket.slastatus
+  ].map(value => String(firstText(value) || "").toLowerCase());
+  return textValues.some(value => value.includes("hold"));
 }
 
 async function loadAppointmentsWithFallbacks(env, date, agentIds) {
