@@ -13,7 +13,7 @@ const tokenCache = {
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET,POST,OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type,Authorization"
+  "Access-Control-Allow-Headers": "Content-Type,Authorization,X-Dispatch-Token"
 };
 
 const excludedTicketTypeNames = new Set([
@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1015;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-28-complete-status-flag";
+const WORKER_BUILD = "2026-05-28-dispatch-test-token";
 
 export default {
   async fetch(request, env) {
@@ -45,6 +45,8 @@ export default {
       }
 
       if (url.pathname === "/api/halo/action" && request.method === "POST") {
+        const tokenCheck = verifyDispatchToken(request, env);
+        if (!tokenCheck.ok) return json({ ok: false, error: tokenCheck.error }, tokenCheck.status);
         const body = await request.json();
         return json(await handleDashboardAction(body, env));
       }
@@ -55,6 +57,34 @@ export default {
     }
   }
 };
+
+function verifyDispatchToken(request, env) {
+  const expected = String(env.DISPATCH_TEST_TOKEN || "").trim();
+  if (!expected) return { ok: true };
+
+  const authHeader = request.headers.get("Authorization") || "";
+  const bearerToken = authHeader.replace(/^Bearer\s+/i, "").trim();
+  const supplied = request.headers.get("X-Dispatch-Token") || bearerToken;
+  if (constantTimeEqual(supplied, expected)) return { ok: true };
+
+  return {
+    ok: false,
+    status: supplied ? 403 : 401,
+    error: supplied ? "Invalid dispatch test token." : "Dispatch test token required."
+  };
+}
+
+function constantTimeEqual(actual, expected) {
+  const left = String(actual || "");
+  const right = String(expected || "");
+  if (!left || !right || left.length !== right.length) return false;
+
+  let difference = 0;
+  for (let index = 0; index < right.length; index += 1) {
+    difference |= left.charCodeAt(index) ^ right.charCodeAt(index);
+  }
+  return difference === 0;
+}
 
 async function handleDashboardAction(body, env) {
   const { action, payload = {} } = body || {};

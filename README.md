@@ -46,7 +46,8 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    - `HALO_DISPLAY_TIME_ZONE` controls how Halo calendar times are shown on the dispatch board.
    - `HALO_PAGE_SIZE` and `HALO_MAX_PAGES` control paginated Halo reads. The default page size is `100`.
    - `HALO_USER_PREF_REPORT_ID` and `HALO_SAVED_FILTER_REPORT_ID` point to the published Halo reports used to read shared storage.
-   - `HALO_USER_PREF_TABLE_ID` and `HALO_SAVED_FILTER_TABLE_ID` point to the Halo custom tables used to write shared storage. Current defaults are `1013` and `1014`.
+   - `HALO_USER_PREF_TABLE_ID` and `HALO_SAVED_FILTER_TABLE_ID` point to the Halo custom tables used to write shared storage. Current defaults are `1015` and `1014`.
+   - `DISPATCH_TEST_TOKEN` is an optional temporary shared token that protects Worker actions during testing.
 
 5. Store secrets:
 
@@ -54,9 +55,11 @@ The browser should never store the HaloPSA client secret. The Worker keeps HaloP
    wrangler secret put HALO_CLIENT_ID
    wrangler secret put HALO_CLIENT_SECRET
    wrangler secret put HALO_REPORT_BEARER_TOKEN
+   wrangler secret put DISPATCH_TEST_TOKEN
    ```
 
    `HALO_REPORT_BEARER_TOKEN` is the bearer token from the published Halo reports used for user preferences and saved filters.
+   If `DISPATCH_TEST_TOKEN` is set, open the board with `?viewer_agent_id=4&dispatch_token=your-token`. The token is sent to the Worker as `X-Dispatch-Token` for dashboard actions.
 
 6. Deploy:
 
@@ -122,7 +125,7 @@ Current read reports:
 
 ### DispatchBoardUserPreferences
 
-Current table ID: `1013`. One row per Halo agent.
+Current table ID: `1015`. One row per Halo agent.
 
 - `CFDispatchAgentID` text/integer, unique by agent
 - `CFDispatchTheme` text

@@ -48,6 +48,7 @@ const technicians = [
       activeFilterListKey: null,
       draftFilter: null,
       currentAgentId: "",
+      dispatchToken: "",
       activeTechEditId: null,
       techThemes: {},
       collapsedTechGroups: {},
@@ -549,8 +550,10 @@ const technicians = [
     function applyIframeParams() {
       const params = new URLSearchParams(window.location.search);
       const viewerAgentIds = splitParamList(params.get("viewer_agent_id") || params.get("current_agent_id") || params.get("dispatch_agent_id"));
+      const dispatchToken = params.get("dispatch_token") || params.get("token") || "";
 
       if (viewerAgentIds.length) state.currentAgentId = viewerAgentIds[0];
+      if (dispatchToken) state.dispatchToken = dispatchToken.trim();
     }
 
     function splitParamList(value) {
@@ -3519,7 +3522,7 @@ const technicians = [
       try {
         return await fetchWorkerJson("/api/halo/action", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: dispatchRequestHeaders(),
           body: JSON.stringify(request)
         });
       } catch (error) {
@@ -3527,6 +3530,12 @@ const technicians = [
         if (!options.quiet) toast("HaloPSA API error", friendlyFetchError(error));
         return { ok: false, error: error.message, request };
       }
+    }
+
+    function dispatchRequestHeaders() {
+      const headers = { "Content-Type": "application/json" };
+      if (state.dispatchToken) headers["X-Dispatch-Token"] = state.dispatchToken;
+      return headers;
     }
 
     async function fetchWorkerJson(path, options = {}) {
