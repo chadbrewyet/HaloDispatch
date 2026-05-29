@@ -1911,11 +1911,14 @@ const technicians = [
       const scheduleCollapsed = Boolean(state.collapsedTechGroups[scheduleKey]);
       const noTimeCollapsed = Boolean(state.collapsedTechGroups[noTimeKey]);
       const pastCollapsed = state.collapsedTechGroups[pastKey] !== false;
+      const noTimeVisible = !noTimeCollapsed;
+      const pastVisible = orderedPastNoTime.length > 0 && !pastCollapsed;
+      const taskSplitClass = scheduleCollapsed && noTimeVisible && pastVisible ? "two-task-zones" : "single-task-zone";
       const techStyle = `style="--tech-color:${escapeHtml(techThemeColor(tech.id))};"`;
       const workload = techWorkloadSummary(tech, timed, allDay);
       if (boardLayoutOrientation() === "vertical") {
         return `
-          <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
+          <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""} ${taskSplitClass}" data-tech-id="${tech.id}" ${techStyle}>
             <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
               <span></span>
               <div class="tech-title">
@@ -1924,13 +1927,13 @@ const technicians = [
               </div>
               <button class="icon tech-edit-btn" data-edit-tech="${tech.id}" type="button" title="Edit technician theme">${pencilIconSvg()}</button>
             </header>
-            <div class="vertical-task-stack">
+            <div class="vertical-task-stack ${taskSplitClass}">
               ${renderTechGroupToggle(tech.id, "schedule", scheduleCollapsed, "Calendar")}
               ${scheduleCollapsed ? "" : renderTaskZone("allDay", tech.id, tech.name, "All-Day Tasks", allDay, "Drop ticket here for all-day task")}
               ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
               ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
               ${orderedPastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", orderedPastNoTime.length, "alert") : ""}
-              ${orderedPastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, orderedPastNoTime) : ""}
+              ${pastVisible ? renderPastTaskZone(tech.id, tech.name, orderedPastNoTime) : ""}
             </div>
             ${scheduleCollapsed ? `<div class="calendar-collapsed-note">Calendar hidden</div>` : `
               <div class="calendar" data-calendar-tech-id="${tech.id}">
@@ -1942,7 +1945,7 @@ const technicians = [
         `;
       }
       return `
-        <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""}" data-tech-id="${tech.id}" ${techStyle}>
+        <section class="tech-column ${scheduleCollapsed ? "schedule-collapsed" : ""} ${noTimeCollapsed ? "notime-collapsed" : ""} ${taskSplitClass}" data-tech-id="${tech.id}" ${techStyle}>
           <header class="tech-header" draggable="true" data-tech-handle="${tech.id}">
             <span></span>
             <div class="tech-title">
@@ -1962,7 +1965,7 @@ const technicians = [
           ${renderTechGroupToggle(tech.id, "noTime", noTimeCollapsed, "Today's Tasks", noTime.length)}
           ${noTimeCollapsed ? "" : renderTaskZone("noTime", tech.id, tech.name, "Today's Tasks", noTime, "Drop ticket here to assign date only")}
           ${orderedPastNoTime.length ? renderTechGroupToggle(tech.id, "pastNoTime", pastCollapsed, "Past Tasks", orderedPastNoTime.length, "alert") : ""}
-          ${orderedPastNoTime.length && !pastCollapsed ? renderPastTaskZone(tech.id, tech.name, orderedPastNoTime) : ""}
+          ${pastVisible ? renderPastTaskZone(tech.id, tech.name, orderedPastNoTime) : ""}
         </section>
       `;
     }

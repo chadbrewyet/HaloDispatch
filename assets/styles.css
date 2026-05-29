@@ -1051,6 +1051,10 @@
     }
 
     .tech-column.schedule-collapsed {
+      grid-template-rows: auto auto auto minmax(0, 1fr);
+    }
+
+    .tech-column.schedule-collapsed.two-task-zones {
       grid-template-rows: auto auto auto minmax(0, 1fr) auto minmax(0, 1fr);
     }
 
@@ -1226,6 +1230,14 @@
       overflow: auto;
       border-right: 1px solid var(--line);
       background: var(--panel);
+    }
+
+    .tech-column.schedule-collapsed .vertical-task-stack {
+      grid-template-rows: auto auto minmax(0, 1fr);
+    }
+
+    .tech-column.schedule-collapsed .vertical-task-stack.two-task-zones {
+      grid-template-rows: auto auto minmax(0, 1fr) auto minmax(0, 1fr);
     }
 
     .board.vertical .calendar-collapsed-note {
