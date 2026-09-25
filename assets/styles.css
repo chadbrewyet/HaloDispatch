@@ -271,6 +271,18 @@
       font-weight: 800;
     }
 
+    .api-pill[data-status="checking"] {
+      color: #755b14;
+      border-color: #dbc36d;
+      background: #fff9df;
+    }
+
+    .api-pill[data-status="error"] {
+      color: #9f2929;
+      border-color: #e0a2a2;
+      background: #fff0f0;
+    }
+
     .workspace {
       display: grid;
       grid-template-columns: minmax(0, 1fr);
@@ -1886,6 +1898,18 @@
       color: #b9f2dd;
       border-color: #467763;
       background: #173227;
+    }
+
+    body[data-theme="dark"] .api-pill[data-status="checking"] {
+      color: #f3dc8b;
+      border-color: #76652f;
+      background: #342e19;
+    }
+
+    body[data-theme="dark"] .api-pill[data-status="error"] {
+      color: #ffb7b7;
+      border-color: #874b4b;
+      background: #3a2020;
     }
 
     .config-drawer {

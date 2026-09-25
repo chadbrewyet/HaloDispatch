@@ -137,8 +137,10 @@ const technicians = [
       resetTicketRefreshTimer();
       resetCurrentTimeTimer();
       try {
-        await loadInitialHaloState();
-        toast("Ready", state.mockMode ? "Dispatch board loaded in mock mode." : "Dispatch board connected to HaloPSA.");
+        const initialReady = await loadInitialHaloState();
+        if (initialReady) {
+          toast("Ready", state.mockMode ? "Dispatch board loaded in mock mode." : "Dispatch board connected to HaloPSA.");
+        }
       } finally {
         setLoadingMessage("Opening board...");
         renderAll();
@@ -147,16 +149,23 @@ const technicians = [
     }
 
     async function loadInitialHaloState() {
+      setLoadingMessage(state.mockMode ? "Starting mock mode..." : "Checking HaloPSA access...");
+      const accessReady = await testWorkerConnection({ quiet: true });
+      if (!accessReady) {
+        setLoadingMessage("HaloPSA access could not be verified.");
+        return false;
+      }
       setLoadingMessage(state.mockMode ? "Starting mock mode..." : "Loading saved preferences...");
       await loadHaloStorage({ quiet: true, skipReload: true });
       setLoadingMessage("Loading Halo agents...");
-      await loadHaloTechnicians({ quiet: true, skipAppointments: true });
+      await loadHaloTechnicians({ quiet: true, skipAppointments: true, skipConnectionCheck: true });
       setLoadingMessage("Loading ticket types...");
       await loadHaloTicketTypes();
       setLoadingMessage("Loading service tickets...");
       await loadHaloTickets({ quiet: true });
       setLoadingMessage("Loading calendars...");
       await loadHaloAppointments({ quiet: true });
+      return true;
     }
 
     function setLoadingMessage(message) {
@@ -517,9 +526,16 @@ const technicians = [
       if (!state.apiProxyUrl) state.apiProxyUrl = DEFAULT_WORKER_API_URL;
       $("apiProxyUrl").value = state.apiProxyUrl;
       $("mockModeCheck").checked = state.mockMode;
-      $("apiState").textContent = state.mockMode ? "HaloPSA mock mode" : "HaloPSA Worker connected";
+      setApiStatus(state.mockMode ? "HaloPSA mock mode" : "Checking HaloPSA access...", state.mockMode ? "mock" : "checking");
       $("apiProxyUrl").disabled = state.mockMode;
       $("testWorkerBtn").disabled = state.mockMode;
+    }
+
+    function setApiStatus(message, status = "checking") {
+      const element = $("apiState");
+      element.textContent = message;
+      element.dataset.status = status;
+      element.title = message;
     }
 
     function ensureSelectedTechnicians() {
@@ -3079,7 +3095,7 @@ const technicians = [
 
     async function loadHaloTechnicians(options = {}) {
       if (!effectiveWorkerUrl()) return;
-      const workerReady = await testWorkerConnection({ quiet: true });
+      const workerReady = options.skipConnectionCheck || await testWorkerConnection({ quiet: true });
       if (!workerReady) return;
       const result = await callHalo("loadTechnicians", {}, { quiet: true });
       const data = result?.data;
@@ -3487,25 +3503,57 @@ const technicians = [
 
     async function testWorkerConnection(options = {}) {
       if (!effectiveWorkerUrl()) {
-        $("apiState").textContent = "HaloPSA mock mode";
+        setApiStatus("HaloPSA mock mode", "mock");
         if (!options.quiet) toast("Mock mode active", "Disable mock mode in Settings to connect to HaloPSA.");
-        return false;
+        return true;
       }
 
+      setApiStatus("Checking HaloPSA access...", "checking");
       try {
-        const result = await fetchWorkerJson("/api/health");
-        const ok = result?.ok === true && result?.service === "halo-dispatch-api";
-        if (!ok) {
+        const health = await fetchWorkerJson("/api/health");
+        if (health?.ok !== true || health?.service !== "halo-dispatch-api") {
           throw new Error("The URL responded, but it does not look like the Halo Dispatch Worker.");
         }
-        $("apiState").textContent = "HaloPSA Worker connected";
-        if (!options.quiet) toast("Worker connected", "Cloudflare Worker health check passed.");
+        await fetchWorkerJson("/api/halo/action", {
+          method: "POST",
+          headers: dispatchRequestHeaders(),
+          body: JSON.stringify({
+            action: "checkAccess",
+            payload: { context: { viewerAgentId: currentStorageAgentId() || undefined } },
+            timestamp: new Date().toISOString()
+          })
+        });
+        setApiStatus("HaloPSA API connected", "connected");
+        if (!options.quiet) toast("HaloPSA connected", "Worker authentication and HaloPSA API access are working.");
         return true;
       } catch (error) {
-        $("apiState").textContent = "Worker connection failed";
-        if (!options.quiet) toast("Worker connection failed", friendlyFetchError(error));
+        const accessError = apiAccessError(error);
+        setApiStatus(accessError.status, "error");
+        toast(accessError.title, accessError.message);
         return false;
       }
+    }
+
+    function apiAccessError(error) {
+      if (error?.code === "MISSING_DISPATCH_TOKEN" || error?.status === 401) {
+        return {
+          status: "Access denied: token missing",
+          title: "Dispatch token missing",
+          message: "Add dispatch_token to the Dispatch Board iframe URL, then reload the page."
+        };
+      }
+      if (error?.code === "INVALID_DISPATCH_TOKEN" || error?.status === 403) {
+        return {
+          status: "Access denied: invalid token",
+          title: "Dispatch token rejected",
+          message: "The URL token does not match the DISPATCH_TEST_TOKEN configured on the Cloudflare Worker."
+        };
+      }
+      return {
+        status: "HaloPSA API unavailable",
+        title: "HaloPSA connection failed",
+        message: friendlyFetchError(error)
+      };
     }
 
     async function callHalo(action, payload, options = {}) {
@@ -3548,7 +3596,10 @@ const technicians = [
       const response = await fetch(`${workerBaseUrl()}${path}`, options);
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        throw new Error(result.error || result.message || `HaloPSA proxy returned ${response.status}`);
+        const error = new Error(result.error || result.message || `HaloPSA proxy returned ${response.status}`);
+        error.status = response.status;
+        error.code = result.code || "";
+        throw error;
       }
       return result;
     }

@@ -29,7 +29,7 @@ const DEFAULT_USER_PREF_TABLE_ID = 1015;
 const DEFAULT_SAVED_FILTER_TABLE_ID = 1014;
 const DEFAULT_USER_PREF_REPORT_ID = "7ff3826a-f693-43dd-a7dc-333acf2d0a63";
 const DEFAULT_SAVED_FILTER_REPORT_ID = "267cb7b5-35de-48e6-baf8-936feaf90949";
-const WORKER_BUILD = "2026-05-29-ticket-status-hold";
+const WORKER_BUILD = "2026-09-25-authenticated-access-check";
 
 export default {
   async fetch(request, env) {
@@ -46,7 +46,9 @@ export default {
 
       if (url.pathname === "/api/halo/action" && request.method === "POST") {
         const tokenCheck = verifyDispatchToken(request, env);
-        if (!tokenCheck.ok) return json({ ok: false, error: tokenCheck.error }, tokenCheck.status);
+        if (!tokenCheck.ok) {
+          return json({ ok: false, error: tokenCheck.error, code: tokenCheck.code }, tokenCheck.status);
+        }
         const body = await request.json();
         return json(await handleDashboardAction(body, env));
       }
@@ -70,6 +72,7 @@ function verifyDispatchToken(request, env) {
   return {
     ok: false,
     status: supplied ? 403 : 401,
+    code: supplied ? "INVALID_DISPATCH_TOKEN" : "MISSING_DISPATCH_TOKEN",
     error: "Access denied"
   };
 }
@@ -88,6 +91,11 @@ function constantTimeEqual(actual, expected) {
 
 async function handleDashboardAction(body, env) {
   const { action, payload = {} } = body || {};
+
+  if (action === "checkAccess") {
+    await haloRequest(env, "/api/Agent?count=1&page_no=1", { method: "GET" });
+    return { ok: true, mode: "live", build: WORKER_BUILD };
+  }
 
   if (action === "refreshReports") {
     return handleReportRefresh(payload, env);
